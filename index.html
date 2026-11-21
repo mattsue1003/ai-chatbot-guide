@@ -256,7 +256,9 @@ footer{font-size:.8em; color:var(--muted); text-align:center}
     <details><summary>機器人回覆「抱歉，AI 暫時無法回覆」</summary>
       <p>這代表 LINE / Telegram 那一半已經通了，問題在 Gemini 這一端。後面接的訊息就是原因：常見是金鑰貼錯（多了空白），或短時間問太多次超過免費額度。到 Apps Script 執行 <code class="inl">testGemini</code> 就能看到詳細錯誤。</p></details>
     <details><summary>出現「This model … is no longer available」</summary>
-      <p>Google 會定期停用舊的 Gemini 模型。新版範例程式碼已經會在模型停用時，自動改用最新的 Flash 模型（<code class="inl">gemini-flash-latest</code>）。如果還是出現這個錯誤：到「貼上程式碼」那一步，把「Gemini 模型名稱」換成錯誤訊息裡建議的名稱，重新複製程式碼貼上、儲存，再到「管理部署作業」部署「新版本」。</p></details>
+      <p>Google 會定期停用舊的 Gemini 模型。新版範例程式碼已經會在模型停用時，依序自動改用 <code class="inl">gemini-flash-latest</code>、<code class="inl">gemini-flash-lite-latest</code>。如果還是出現這個錯誤：到「貼上程式碼」那一步，把「Gemini 模型名稱」換成錯誤訊息裡建議的名稱，重新複製程式碼貼上、儲存，再到「管理部署作業」部署「新版本」。</p></details>
+    <details><summary>出現「This model is currently experiencing high demand」</summary>
+      <p>這是 Google 那邊太多人同時使用 Gemini，暫時忙線，不是你的設定錯了，通常過幾分鐘就會恢復。新版範例程式碼遇到忙線，會自動改用備用模型，最後一個是比較輕量、通常比較不擠的 <code class="inl">gemini-flash-lite-latest</code>。如果全部模型都忙線，機器人會回「Google 的 AI 現在太多人使用，請過一兩分鐘再問一次」。上課時全班同時測試特別容易遇到，可以請學員錯開幾秒再按執行。</p></details>
     <details><summary>LINE 按下 Verify 出現錯誤</summary>
       <p>Apps Script 的網址會先轉址一次，有時 Verify 會顯示失敗。直接用手機傳一則訊息測試；只要機器人有回覆，這個錯誤可以忽略。</p></details>
     <details><summary>Telegram 機器人同一個問題回了兩次以上</summary>
@@ -307,16 +309,35 @@ state.persona = PERSONAS['一般小幫手'];
 function q(s){ return "'" + String(s).replace(/\\/g,'\\\\').replace(/'/g, "\\'").replace(/\n/g,' ') + "'"; }
 var GEMINI_PART = [
 "",
-"// ---- 問 Gemini（模型停用時自動改用最新的 Flash 模型）----",
+"// ---- 問 Gemini：模型忙線或停用時，自動換下一個模型再試 ----",
 "function askGemini(text) {",
-"  var data = callGemini(MODEL, text);",
-"  var gone = data.error && (data.error.code === 404 || /model/i.test(data.error.message));",
-"  if (gone && MODEL !== BACKUP_MODEL) data = callGemini(BACKUP_MODEL, text);",
+"  var models = [MODEL].concat(BACKUP_MODELS.filter(function (m) { return m !== MODEL; }));",
+"  var data = {};",
+"  for (var i = 0; i < models.length; i++) {",
+"    data = callGemini(models[i], text);",
+"    if (!data.error) break;",
+"    var c = data.error.code;",
+"    if ([404, 429, 500, 502, 503].indexOf(c) < 0) break;   // 金鑰錯誤等問題，換模型也沒用",
+"    Logger.log(models[i] + ' 暫時不能用（' + c + '），改試下一個模型');",
+"  }",
 "  try {",
 "    return data.candidates[0].content.parts.map(function (p) { return p.text || ''; }).join('');",
 "  } catch (err) {",
-"    return '抱歉，AI 暫時無法回覆：' + (data.error ? data.error.message : '沒有收到答案');",
+"    return explainError(data.error);",
 "  }",
+"}",
+"",
+"// ---- 把 Gemini 的英文錯誤翻成看得懂的話 ----",
+"function explainError(e) {",
+"  if (!e) return '抱歉，AI 這次沒有給出答案，請換個說法再問一次。';",
+"  var tips = {",
+"    400: '金鑰好像不對，請確認 GEMINI_API_KEY 有完整貼上、沒有多餘空白。',",
+"    403: '這把金鑰沒有權限，請到 AI Studio 重新建立一把金鑰。',",
+"    404: '模型名稱已停用，請把 MODEL 換成錯誤訊息建議的名稱。',",
+"    429: '今天的免費額度用完了，或問得太快，請等一下再試。',",
+"    503: 'Google 的 AI 現在太多人使用，請過一兩分鐘再問一次。'",
+"  };",
+"  return '抱歉，AI 暫時無法回覆：' + (tips[e.code] || '') + '（' + e.code + ' ' + e.message + '）';",
 "}",
 "",
 "function callGemini(model, text) {",
@@ -331,7 +352,11 @@ var GEMINI_PART = [
 "    }),",
 "    muteHttpExceptions: true",
 "  });",
-"  return JSON.parse(res.getContentText());",
+"  try {",
+"    return JSON.parse(res.getContentText());",
+"  } catch (err) {",
+"    return { error: { code: res.getResponseCode(), message: 'Gemini 沒有回傳正確的資料' } };",
+"  }",
 "}",
 "",
 "// ---- 擋掉平台重送的同一則訊息 ----",
@@ -357,7 +382,7 @@ function codeFor(pf){
 "var GEMINI_API_KEY = " + q(key) + ";",
 (pf==='line' ? "var LINE_TOKEN = " : "var TG_TOKEN = ") + q(tok) + ";",
 "var MODEL = " + q(state.model.trim() || DEFAULT_MODEL) + ";   // 模型名稱，可到 AI Studio 查最新的",
-"var BACKUP_MODEL = 'gemini-flash-latest';   // 上面的模型停用時改用這個",
+"var BACKUP_MODELS = ['gemini-flash-latest', 'gemini-flash-lite-latest'];   // 上面的模型忙線或停用時，依序改用這些",
 "var SYSTEM_PROMPT = " + q(state.persona || PERSONAS['一般小幫手']) + ";",
 "// =========================",
 ""];
