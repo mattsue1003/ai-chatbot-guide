@@ -1,0 +1,771 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AI 機器人串接教室</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="一步一步把 Gemini AI 接上 LINE 或 Telegram，做出自己的聊天機器人。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: 頂部平台切換 → 資料流程圖 → 左側步驟清單 + 右側單步內容（含示意畫面、檢查點、小工具） */
+:root{
+  --bg:#F3F6F5; --surface:#FFFFFF; --sunk:#E9EFED; --ink:#13201C; --muted:#56665F; --line:#D5DFDB;
+  --line-green:#06C755; --tg-blue:#2AABEE; --accent:#06A04A; --accent-ink:#FFFFFF; --accent-soft:#E0F5E8;
+  --warn:#9A4A06; --warn-soft:#FDF0E1; --ok:#0C7A43;
+  --code-bg:#102019; --code-ink:#DDEBE4; --code-key:#7FE0A7; --code-str:#F4C27A; --code-com:#7C948A;
+  --mock-bg:#FAFBFB; --mock-bar:#E6ECEA;
+  --f-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --f-num:"Space Grotesk","Noto Sans TC",system-ui,sans-serif;
+  --f-code:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  --base:16px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1412; --surface:#151F1C; --sunk:#1B2723; --ink:#E4EDE9; --muted:#97A8A1; --line:#2B3934;
+  --accent:#2BD879; --accent-ink:#06170E; --accent-soft:#163526; --warn:#F2B36B; --warn-soft:#33240F; --ok:#5BE39A;
+  --code-bg:#08110D; --mock-bg:#1A2522; --mock-bar:#22302C; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1412; --surface:#151F1C; --sunk:#1B2723; --ink:#E4EDE9; --muted:#97A8A1; --line:#2B3934;
+  --accent:#2BD879; --accent-ink:#06170E; --accent-soft:#163526; --warn:#F2B36B; --warn-soft:#33240F; --ok:#5BE39A;
+  --code-bg:#08110D; --mock-bg:#1A2522; --mock-bar:#22302C; color-scheme:dark}
+body[data-platform="telegram"]{--accent:#1688C9; --accent-soft:#DFF0FA}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) body[data-platform="telegram"]{--accent:#5CC3F5; --accent-soft:#12293A; --accent-ink:#041520}}
+:root[data-theme="dark"] body[data-platform="telegram"]{--accent:#5CC3F5; --accent-soft:#12293A; --accent-ink:#041520}
+
+*{box-sizing:border-box}
+body{background:var(--bg); color:var(--ink); font-family:var(--f-body); font-size:var(--base); line-height:1.7; margin:0}
+body.big{--base:20px}
+.wrap{max-width:1180px; margin:0 auto; padding-block:24px 64px; padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); display:flex; flex-direction:column; gap:22px}
+h1,h2,h3{text-wrap:balance; line-height:1.3; margin:0}
+a{color:var(--accent)}
+button{font:inherit; cursor:pointer}
+:focus-visible{outline:3px solid var(--accent); outline-offset:2px}
+
+/* header */
+.top{display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:16px}
+.brand small{display:block; font-family:var(--f-num); letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-size:.75em}
+.brand h1{font-size:clamp(1.6rem, 4vw, 2.3rem); font-weight:900}
+.brand p{margin:4px 0 0; color:var(--muted); max-width:60ch}
+.controls{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+.seg{display:inline-flex; background:var(--sunk); border-radius:999px; padding:4px; gap:4px}
+.seg button{border:0; background:transparent; color:var(--muted); padding:8px 16px; border-radius:999px; font-weight:700; display:flex; align-items:center; gap:8px}
+.seg button[aria-pressed="true"]{background:var(--surface); color:var(--ink); box-shadow:0 1px 3px rgb(0 0 0 / .12)}
+.seg .dot{width:12px; height:12px; border-radius:50%}
+.ghost{border:1px solid var(--line); background:var(--surface); color:var(--ink); border-radius:999px; padding:8px 14px; font-weight:500}
+.ghost[aria-pressed="true"]{border-color:var(--accent); color:var(--accent)}
+
+/* flow */
+.flow{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:18px 20px}
+.flow h2{font-size:1.05em; margin-bottom:12px}
+.flow-row{display:flex; align-items:stretch; gap:6px; overflow-x:auto; padding-bottom:4px}
+.node{flex:1 1 0; min-width:120px; background:var(--sunk); border-radius:12px; padding:10px 12px; display:flex; flex-direction:column; gap:2px}
+.node b{font-size:.95em}
+.node span{font-size:.8em; color:var(--muted); line-height:1.45}
+.node.key{background:var(--accent-soft)}
+.node .ic{font-family:var(--f-num); font-weight:700; font-size:.72em; color:var(--accent); letter-spacing:.08em}
+.arrow{align-self:center; color:var(--muted); font-family:var(--f-num); flex:0 0 auto}
+.flow-note{margin:10px 0 0; font-size:.85em; color:var(--muted)}
+
+/* prep */
+.prep{display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:.9em}
+.prep b{margin-right:4px}
+.chip{background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:4px 12px}
+
+/* main */
+.main{display:grid; grid-template-columns:280px minmax(0,1fr); gap:22px; align-items:start}
+.side{min-width:0; position:sticky; top:calc(env(safe-area-inset-top, 0px) + 12px); background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:14px; display:flex; flex-direction:column; gap:10px}
+.prog{display:flex; flex-direction:column; gap:6px; padding:2px 4px 8px; border-bottom:1px solid var(--line)}
+.prog-top{display:flex; justify-content:space-between; font-size:.85em; color:var(--muted)}
+.prog-top b{font-family:var(--f-num); color:var(--ink)}
+.bar{height:8px; background:var(--sunk); border-radius:99px; overflow:hidden}
+.bar i{display:block; height:100%; background:var(--accent); width:0; transition:width .4s}
+.steps{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:2px}
+.steps button{width:100%; text-align:left; border:0; background:transparent; color:var(--ink); padding:8px 8px; border-radius:10px; display:grid; grid-template-columns:28px 1fr; gap:10px; align-items:center; line-height:1.35}
+.steps button:hover{background:var(--sunk)}
+.steps button[aria-current="step"]{background:var(--accent-soft)}
+.num{width:28px; height:28px; border-radius:50%; display:grid; place-items:center; font-family:var(--f-num); font-weight:700; font-size:.85em; border:2px solid var(--line); color:var(--muted); background:var(--surface)}
+.steps button[aria-current="step"] .num{border-color:var(--accent); color:var(--accent)}
+.steps .done .num{background:var(--accent); border-color:var(--accent); color:var(--accent-ink)}
+.steps small{display:block; color:var(--muted); font-size:.78em}
+.reset{border:0; background:none; color:var(--muted); font-size:.8em; text-decoration:underline; align-self:flex-start; padding:4px}
+
+.panel{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:24px; display:flex; flex-direction:column; gap:20px; min-width:0}
+.phead{display:flex; flex-direction:column; gap:6px}
+.eyebrow{font-family:var(--f-num); font-weight:700; color:var(--accent); font-size:.8em; letter-spacing:.1em; text-transform:uppercase}
+.phead h2{font-size:clamp(1.35rem, 3vw, 1.75rem); font-weight:900}
+.why{margin:0; color:var(--muted); max-width:65ch}
+.meta{display:flex; gap:8px; flex-wrap:wrap; font-size:.8em}
+.meta span{background:var(--sunk); padding:2px 10px; border-radius:99px; color:var(--muted)}
+.cols{display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); gap:24px; align-items:start}
+.cols.single{grid-template-columns:minmax(0,1fr)}
+.actions{margin:0; padding:0; list-style:none; counter-reset:a; display:flex; flex-direction:column; gap:12px}
+.actions li{counter-increment:a; display:grid; grid-template-columns:30px 1fr; gap:10px; min-width:0}
+.actions li::before{content:counter(a); width:26px; height:26px; border-radius:8px; background:var(--accent); color:var(--accent-ink); font-family:var(--f-num); font-weight:700; display:grid; place-items:center; font-size:.85em; margin-top:2px}
+.actions li > div{min-width:0}
+kbd,.ui{font-family:var(--f-body); background:var(--sunk); border:1px solid var(--line); border-bottom-width:2px; border-radius:6px; padding:0 6px; font-size:.9em; white-space:nowrap; font-weight:500}
+code.inl{font-family:var(--f-code); background:var(--sunk); padding:1px 6px; border-radius:5px; font-size:.86em; word-break:break-all}
+.link-out{display:inline-flex; align-items:center; gap:6px; margin-top:6px; background:var(--accent); color:var(--accent-ink); text-decoration:none; padding:6px 14px; border-radius:999px; font-weight:700; font-size:.88em}
+
+.box{border-radius:12px; padding:14px 16px; font-size:.92em}
+.box h3{font-size:.95em; margin-bottom:4px}
+.box ul{margin:4px 0 0; padding-left:1.2em}
+.check{background:var(--accent-soft)}
+.check h3{color:var(--ok)}
+.pit{background:var(--warn-soft)}
+.pit h3{color:var(--warn)}
+.boxes{display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:12px}
+
+/* mockups */
+.fig{margin:0; display:flex; flex-direction:column; gap:6px}
+.fig figcaption{font-size:.75em; color:var(--muted)}
+.mock{border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--mock-bg); font-size:13px; line-height:1.5; box-shadow:0 6px 20px rgb(0 0 0 / .06)}
+.mock-bar{background:var(--mock-bar); display:flex; align-items:center; gap:6px; padding:7px 10px}
+.mock-bar i{width:9px; height:9px; border-radius:50%; background:var(--line)}
+.mock-bar span{margin-left:8px; background:var(--mock-bg); border-radius:6px; padding:1px 10px; font-family:var(--f-code); font-size:11px; color:var(--muted); flex:1; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis}
+.mock-body{padding:14px; display:flex; flex-direction:column; gap:8px; position:relative}
+.m-row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+.m-title{font-weight:700; font-size:14px}
+.m-muted{color:var(--muted); font-size:12px}
+.m-btn{display:inline-flex; align-items:center; gap:4px; border:1px solid var(--line); background:var(--surface); border-radius:6px; padding:3px 10px; font-size:12px; color:var(--ink)}
+.m-btn.pri{background:#1A73E8; color:#fff; border-color:#1A73E8}
+.m-btn.lg{background:#06C755; color:#fff; border-color:#06C755}
+.m-field{border:1px solid var(--line); background:var(--surface); border-radius:6px; padding:4px 8px; font-size:12px; flex:1; min-width:120px; font-family:var(--f-code); color:var(--muted); overflow:hidden; white-space:nowrap; text-overflow:ellipsis}
+.m-side{display:flex; gap:10px}
+.m-nav{display:flex; flex-direction:column; gap:3px; min-width:92px; border-right:1px solid var(--line); padding-right:8px; font-size:12px; color:var(--muted)}
+.m-nav .on{color:var(--ink); font-weight:700; background:var(--sunk); border-radius:4px; padding:0 4px}
+.m-main{flex:1; display:flex; flex-direction:column; gap:7px; min-width:0}
+.m-tabs{display:flex; gap:12px; font-size:12px; border-bottom:1px solid var(--line); padding-bottom:4px; color:var(--muted); flex-wrap:wrap}
+.m-tabs .on{color:var(--ink); font-weight:700; border-bottom:2px solid #06C755}
+.m-toggle{width:30px; height:16px; border-radius:99px; background:#06C755; position:relative; display:inline-block; flex:0 0 auto}
+.m-toggle::after{content:""; position:absolute; right:2px; top:2px; width:12px; height:12px; border-radius:50%; background:#fff}
+.m-toggle.off{background:var(--line)}
+.m-toggle.off::after{right:auto; left:2px}
+.m-code{background:var(--code-bg); color:var(--code-ink); font-family:var(--f-code); font-size:11px; border-radius:6px; padding:8px 10px; line-height:1.6; white-space:pre; overflow:hidden}
+.m-dialog{border:1px solid var(--line); background:var(--surface); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:7px; box-shadow:0 8px 24px rgb(0 0 0 / .12)}
+.m-kv{display:grid; grid-template-columns:96px 1fr; gap:6px; align-items:center; font-size:12px}
+.m-select{border:1px solid var(--line); border-radius:6px; padding:2px 8px; background:var(--surface)}
+.hot{outline:2.5px solid #F05A28; outline-offset:2px; border-radius:6px; position:relative; animation:pulse 1.8s ease-in-out infinite}
+@keyframes pulse{50%{outline-color:rgb(240 90 40 / .35)}}
+.pin{display:inline-grid; place-items:center; width:18px; height:18px; border-radius:50%; background:#F05A28; color:#fff; font-family:var(--f-num); font-size:11px; font-weight:700; flex:0 0 auto}
+/* phone mock */
+.phone{width:min(280px, 100%); margin:0 auto; border:8px solid var(--ink); border-radius:28px; overflow:hidden; background:var(--mock-bg); font-size:13px; line-height:1.45}
+.ph-top{padding:10px 12px; font-weight:700; display:flex; align-items:center; gap:8px; color:#fff}
+.ph-top.line{background:#06C755}
+.ph-top.tg{background:#2AABEE}
+.ph-av{width:24px; height:24px; border-radius:50%; background:rgb(255 255 255 / .35)}
+.ph-body{padding:12px; display:flex; flex-direction:column; gap:8px; min-height:220px}
+.bub{max-width:82%; padding:7px 11px; border-radius:14px; background:var(--surface); border:1px solid var(--line); align-self:flex-start}
+.bub.me{align-self:flex-end; background:#B8F2C9; border-color:#B8F2C9; color:#10301C}
+.tgc .bub.me{background:#D6F0FD; border-color:#D6F0FD; color:#0B2C3E}
+.bub code{font-family:var(--f-code); font-size:11px; word-break:break-all; color:var(--ink)}
+.bub.tok code{background:#FFF4C2; color:#3B2F00; padding:0 3px; border-radius:3px}
+
+/* tool */
+.tool{border:2px dashed var(--accent); border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:12px; background:var(--bg)}
+.tool h3{font-size:1.05em}
+.tool p{margin:0; font-size:.88em; color:var(--muted)}
+.fields{display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:12px}
+.fld{display:flex; flex-direction:column; gap:4px; font-size:.88em; font-weight:500}
+.fld input,.fld textarea,.fld select{font:inherit; font-weight:400; border:1px solid var(--line); background:var(--surface); color:var(--ink); border-radius:8px; padding:8px 10px; width:100%}
+.fld textarea{min-height:70px; resize:vertical}
+.fld input{font-family:var(--f-code); font-size:.9em}
+.presets{display:flex; gap:6px; flex-wrap:wrap}
+.presets button{border:1px solid var(--line); background:var(--surface); color:var(--ink); border-radius:99px; padding:2px 10px; font-size:.82em}
+.code-wrap{position:relative; min-width:0}
+pre.code{margin:0; background:var(--code-bg); color:var(--code-ink); font-family:var(--f-code); font-size:12.5px; line-height:1.65; padding:16px; border-radius:12px; overflow:auto; max-height:420px; tab-size:2}
+pre.code .k{color:var(--code-key)} pre.code .s{color:var(--code-str)} pre.code .c{color:var(--code-com); font-style:italic}
+.copy{position:absolute; top:10px; right:10px; border:0; background:var(--accent); color:var(--accent-ink); border-radius:8px; padding:6px 12px; font-weight:700; font-size:.82em}
+.outurl{font-family:var(--f-code); font-size:.82em; background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:10px; word-break:break-all; user-select:all}
+.row-btns{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+.btn{border:0; background:var(--accent); color:var(--accent-ink); border-radius:10px; padding:10px 18px; font-weight:700; text-decoration:none; display:inline-flex; align-items:center; gap:6px}
+.btn.sec{background:var(--sunk); color:var(--ink)}
+.btn[disabled]{opacity:.4; cursor:not-allowed}
+.toast{font-size:.85em; color:var(--ok); font-weight:700}
+
+.nav{display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; border-top:1px solid var(--line); padding-top:16px}
+.donebox{display:flex; align-items:center; gap:10px; font-weight:700; cursor:pointer; user-select:none}
+.donebox input{width:22px; height:22px; accent-color:var(--accent)}
+
+/* faq */
+.faq{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:20px 24px; display:flex; flex-direction:column; gap:6px}
+.faq > h2{font-size:1.25em; margin-bottom:6px}
+.faq details{border-top:1px solid var(--line); padding:10px 0}
+.faq summary{font-weight:700; cursor:pointer}
+.faq details p, .faq details ul{margin:8px 0 0; color:var(--muted); font-size:.93em}
+.more{display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px}
+.more div{background:var(--sunk); border-radius:12px; padding:12px 14px; font-size:.9em}
+.more b{display:block}
+footer{font-size:.8em; color:var(--muted); text-align:center}
+
+@media (max-width: 860px){
+  .main{grid-template-columns:minmax(0,1fr)}
+  .side{position:static}
+  .steps{flex-direction:row; overflow-x:auto; gap:6px; padding-bottom:4px}
+  .steps li{flex:0 0 auto}
+  .steps button{width:auto; grid-template-columns:28px auto; padding:6px 10px 6px 6px; border:1px solid var(--line)}
+  .steps small{display:none}
+  .cols{grid-template-columns:minmax(0,1fr)}
+  .panel{padding:18px}
+}
+@media (prefers-reduced-motion: reduce){.hot{animation:none} .bar i{transition:none}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <small>Gemini × Apps Script × LINE / Telegram</small>
+      <h1>AI 機器人串接教室</h1>
+      <p>不用架伺服器、不用信用卡。跟著步驟做，約 40 分鐘就能在手機上和自己的 AI 機器人聊天。</p>
+    </div>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="選擇平台">
+        <button id="pf-line" data-pf="line"><span class="dot" style="background:#06C755"></span>LINE</button>
+        <button id="pf-telegram" data-pf="telegram"><span class="dot" style="background:#2AABEE"></span>Telegram</button>
+      </div>
+      <button class="ghost" id="bigBtn" aria-pressed="false">投影模式（大字）</button>
+    </div>
+  </header>
+
+  <section class="flow" aria-labelledby="flowh">
+    <h2 id="flowh">機器人是怎麼運作的？</h2>
+    <div class="flow-row" id="flowRow"></div>
+    <p class="flow-note">我們要做的事就是：準備兩把「鑰匙」（AI 金鑰、聊天平台權杖），寫好中繼站，再把中繼站網址告訴聊天平台。</p>
+  </section>
+
+  <div class="prep"><b>開始前準備：</b><span class="chip">一個 Google 帳號</span><span class="chip" id="prepPf">LINE 帳號（手機）</span><span class="chip">電腦＋Chrome 瀏覽器</span><span class="chip">約 40 分鐘</span></div>
+
+  <div class="main">
+    <aside class="side" aria-label="步驟清單">
+      <div class="prog">
+        <div class="prog-top"><span>完成進度</span><b id="progTxt">0 / 0</b></div>
+        <div class="bar"><i id="progBar"></i></div>
+      </div>
+      <ol class="steps" id="stepList"></ol>
+      <button class="reset" id="resetBtn">清除我的進度</button>
+    </aside>
+    <article class="panel" id="panel" aria-live="polite"></article>
+  </div>
+
+  <section class="faq" aria-labelledby="faqh">
+    <h2 id="faqh">卡住了？常見問題</h2>
+    <details><summary>傳訊息給機器人，完全沒反應</summary>
+      <ul>
+        <li>Apps Script 部署時「具有存取權的使用者」必須是 <b>所有人</b>，不是「擁有 Google 帳戶的使用者」。</li>
+        <li>網址要用結尾是 <code class="inl">/exec</code> 的那一個，不是 <code class="inl">/dev</code>。</li>
+        <li>改過程式碼後要「管理部署作業 → 編輯 → 版本選『新版本』→ 部署」，否則網址還在跑舊的程式。</li>
+        <li>LINE：確認「Use webhook」已開啟，且官方帳號的「回應設定」裡 Webhook 是開的。</li>
+      </ul></details>
+    <details><summary>機器人回覆「抱歉，AI 暫時無法回覆」</summary>
+      <p>這代表 LINE / Telegram 那一半已經通了，問題在 Gemini 這一端。後面接的訊息就是原因：常見是金鑰貼錯（多了空白）、模型名稱已經改版，或短時間問太多次超過免費額度。到 Apps Script 執行 <code class="inl">testGemini</code> 就能看到詳細錯誤。</p></details>
+    <details><summary>LINE 按下 Verify 出現錯誤</summary>
+      <p>Apps Script 的網址會先轉址一次，有時 Verify 會顯示失敗。直接用手機傳一則訊息測試；只要機器人有回覆，這個錯誤可以忽略。</p></details>
+    <details><summary>Telegram 機器人同一個問題回了兩次以上</summary>
+      <p>Telegram 收到 Apps Script 的轉址回應時，可能會以為沒送到而重送。範例程式已經用 <code class="inl">isDuplicate</code> 擋掉重複訊息；如果你用的是舊版程式，請重新複製本頁的程式碼，再部署「新版本」。</p></details>
+    <details><summary>Google 跳出「這個應用程式未經 Google 驗證」</summary>
+      <p>這是你自己寫的程式，Google 沒有審核過才會這樣提示。點 <span class="ui">進階</span> → <span class="ui">前往「專案名稱」（不安全）</span> → <span class="ui">允許</span> 即可。只授權給你自己的 Google 帳號。</p></details>
+    <details><summary>金鑰外洩了怎麼辦？</summary>
+      <p>金鑰就像密碼，不要截圖貼到群組。外洩時：Gemini 到 AI Studio 刪除舊金鑰再建新的；LINE 在 Developers 重新 Issue 權杖；Telegram 對 BotFather 傳 <code class="inl">/revoke</code>。換完記得改程式碼並部署新版本。</p></details>
+    <h2 style="margin-top:14px; font-size:1.1em">做完了？進階挑戰</h2>
+    <div class="more">
+      <div><b>換個角色</b>改 SYSTEM_PROMPT，讓它變成衛教小幫手、英文家教或課程客服。</div>
+      <div><b>記住上下文</b>用 CacheService 依使用者 ID 存最近幾句對話，一起送給 Gemini。</div>
+      <div><b>只回應關鍵字</b>在群組裡，訊息開頭是「AI」才回覆，避免洗版。</div>
+      <div><b>不想寫程式</b>也可以用 n8n 或 Make 的拖拉流程，把 LINE／Telegram 節點接到 Gemini 節點。</div>
+    </div>
+  </section>
+
+  <footer>示意畫面為簡化繪製，實際按鈕位置可能因網站改版略有不同。本頁不會儲存你輸入的金鑰。</footer>
+</div>
+
+<script>
+(function(){
+'use strict';
+var $ = function(s){ return document.querySelector(s); };
+function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function store(k, v){ try{ if(v === undefined) return JSON.parse(localStorage.getItem(k)); localStorage.setItem(k, JSON.stringify(v)); }catch(e){ return null; } }
+
+/* ---------- mock helpers ---------- */
+function win(url, inner){ return '<div class="mock" aria-hidden="true"><div class="mock-bar"><i></i><i></i><i></i><span>'+url+'</span></div><div class="mock-body">'+inner+'</div></div>'; }
+function fig(inner, cap){ return '<figure class="fig">'+inner+'<figcaption>'+(cap||'示意圖：紅框＋數字對應左邊的步驟')+'</figcaption></figure>'; }
+function pin(n){ return '<b class="pin">'+n+'</b>'; }
+function phone(kind, title, bubbles){
+  return '<div class="phone '+(kind==='tg'?'tgc':'')+'" aria-hidden="true"><div class="ph-top '+kind+'"><span class="ph-av"></span>'+title+'</div><div class="ph-body">'+bubbles+'</div></div>';
+}
+
+/* ---------- state ---------- */
+var state = { pf: 'line', idx: 0, gemKey: '', pfToken: '', persona: '', gasUrl: '' };
+var PERSONAS = {
+  '一般小幫手': '你是一位親切的 AI 小幫手，請用繁體中文（台灣用語）回答，回答簡潔、條列重點，不超過 200 字。',
+  '衛教小幫手': '你是醫療團隊的衛教小幫手，用長輩聽得懂的繁體中文回答健康問題，句子短、多舉生活例子。遇到疑似急症或需要診斷的問題，提醒對方盡快就醫或詢問醫師，不要自行下診斷。',
+  '英文家教': '你是耐心的英文家教。學生傳英文句子時，先指出文法錯誤並給正確寫法，再用繁體中文簡短說明原因；學生傳中文時，教他怎麼用英文說。',
+  '課程客服': '你是課程的客服人員，用繁體中文親切回覆學員關於上課時間、地點、報名方式的問題。不知道的資訊不要編造，請對方留下問題，由老師稍後回覆。'
+};
+state.persona = PERSONAS['一般小幫手'];
+
+/* ---------- code templates (Google Apps Script) ---------- */
+function q(s){ return "'" + String(s).replace(/\\/g,'\\\\').replace(/'/g, "\\'").replace(/\n/g,' ') + "'"; }
+var GEMINI_PART = [
+"",
+"// ---- 問 Gemini ----",
+"function askGemini(text) {",
+"  var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + MODEL + ':generateContent';",
+"  var res = UrlFetchApp.fetch(url, {",
+"    method: 'post',",
+"    contentType: 'application/json',",
+"    headers: { 'x-goog-api-key': GEMINI_API_KEY },",
+"    payload: JSON.stringify({",
+"      system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },",
+"      contents: [{ role: 'user', parts: [{ text: text }] }]",
+"    }),",
+"    muteHttpExceptions: true",
+"  });",
+"  var data = JSON.parse(res.getContentText());",
+"  try {",
+"    return data.candidates[0].content.parts.map(function (p) { return p.text || ''; }).join('');",
+"  } catch (err) {",
+"    return '抱歉，AI 暫時無法回覆：' + (data.error ? data.error.message : '沒有收到答案');",
+"  }",
+"}",
+"",
+"// ---- 擋掉平台重送的同一則訊息 ----",
+"function isDuplicate(id) {",
+"  if (!id) return false;",
+"  var cache = CacheService.getScriptCache();",
+"  if (cache.get(id)) return true;",
+"  cache.put(id, '1', 600);",
+"  return false;",
+"}",
+"",
+"// ---- 在編輯器按「執行」測試金鑰（第一次會要求授權）----",
+"function testGemini() {",
+"  Logger.log(askGemini('請用一句話自我介紹'));",
+"}"
+].join('\n');
+
+function codeFor(pf){
+  var key = state.gemKey.trim() || '在這裡貼上 Gemini API 金鑰';
+  var tok = state.pfToken.trim() || (pf==='line' ? '在這裡貼上 LINE Channel access token' : '在這裡貼上 BotFather 給的 token');
+  var head = [
+"// ===== 只要改這一區 =====",
+"var GEMINI_API_KEY = " + q(key) + ";",
+(pf==='line' ? "var LINE_TOKEN = " : "var TG_TOKEN = ") + q(tok) + ";",
+"var MODEL = 'gemini-2.5-flash';   // 可到 AI Studio 查最新模型名稱",
+"var SYSTEM_PROMPT = " + q(state.persona || PERSONAS['一般小幫手']) + ";",
+"// =========================",
+""];
+  var body = pf==='line' ? [
+"// ---- LINE 傳訊息進來時會執行這裡 ----",
+"function doPost(e) {",
+"  var body = JSON.parse(e.postData.contents);",
+"  (body.events || []).forEach(function (ev) {",
+"    if (ev.type !== 'message' || ev.message.type !== 'text') return;",
+"    if (isDuplicate(ev.webhookEventId)) return;",
+"    var answer = askGemini(ev.message.text);",
+"    UrlFetchApp.fetch('https://api.line.me/v2/bot/message/reply', {",
+"      method: 'post',",
+"      contentType: 'application/json',",
+"      headers: { Authorization: 'Bearer ' + LINE_TOKEN },",
+"      payload: JSON.stringify({",
+"        replyToken: ev.replyToken,",
+"        messages: [{ type: 'text', text: answer.slice(0, 4900) }]",
+"      }),",
+"      muteHttpExceptions: true",
+"    });",
+"  });",
+"  return ContentService.createTextOutput('OK');",
+"}"
+  ] : [
+"// ---- Telegram 傳訊息進來時會執行這裡 ----",
+"function doPost(e) {",
+"  var update = JSON.parse(e.postData.contents);",
+"  var msg = update.message;",
+"  if (!msg || !msg.text) return ContentService.createTextOutput('OK');",
+"  if (isDuplicate('tg' + update.update_id)) return ContentService.createTextOutput('OK');",
+"  if (msg.text === '/start') {",
+"    sendTG(msg.chat.id, '嗨！我是 AI 小幫手，直接打字問我吧。');",
+"  } else {",
+"    sendTG(msg.chat.id, askGemini(msg.text));",
+"  }",
+"  return ContentService.createTextOutput('OK');",
+"}",
+"",
+"function sendTG(chatId, text) {",
+"  UrlFetchApp.fetch('https://api.telegram.org/bot' + TG_TOKEN + '/sendMessage', {",
+"    method: 'post',",
+"    contentType: 'application/json',",
+"    payload: JSON.stringify({ chat_id: chatId, text: text.slice(0, 4000) }),",
+"    muteHttpExceptions: true",
+"  });",
+"}"
+  ];
+  return head.concat(body).join('\n') + '\n' + GEMINI_PART + '\n';
+}
+function highlight(src){
+  return src.split('\n').map(function(line){
+    var ci = line.indexOf('//');
+    var codePart = ci >= 0 ? line.slice(0, ci) : line, com = ci >= 0 ? line.slice(ci) : '';
+    var h = esc(codePart).replace(/(&#39;|')((?:[^'\\]|\\.)*)'/g, '<span class="s">\'$2\'</span>')
+      .replace(/\b(var|function|return|if|else|try|catch)\b/g, '<span class="k">$1</span>');
+    return h + (com ? '<span class="c">'+esc(com)+'</span>' : '');
+  }).join('\n');
+}
+
+/* ---------- shared steps ---------- */
+var S_GEMINI = {
+  t:'拿到 Gemini AI 金鑰', s:'AI 的大腦鑰匙', time:'3 分鐘',
+  why:'機器人要回答問題，得向 Google 的 Gemini AI 發問。API 金鑰就是讓程式代表你去問 Gemini 的通行證，個人學習用有免費額度。',
+  acts:[
+    '用 Google 帳號登入 Google AI Studio。<br><a class="link-out" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">開啟 AI Studio 金鑰頁 ↗</a>',
+    '第一次進入會請你同意服務條款，勾選後按 <span class="ui">繼續</span>。',
+    '按右上角 <span class="ui">建立 API 金鑰</span>（Create API key），選一個專案或讓它自動建立。',
+    '畫面出現一串 <code class="inl">AIza</code> 開頭的金鑰，按複製，先貼到記事本保存。'
+  ],
+  mock: function(){ return fig(win('aistudio.google.com/apikey',
+    '<div class="m-row" style="justify-content:space-between"><span class="m-title">API 金鑰</span><span class="m-btn pri hot">'+pin(3)+' ＋ 建立 API 金鑰</span></div>'+
+    '<div class="m-muted">Gemini API 免費方案適合學習與測試</div>'+
+    '<div class="m-dialog"><div class="m-title" style="font-size:13px">已產生 API 金鑰</div><div class="m-row"><span class="m-field">AIzaSyB•••••••••••••••••••Q7k</span><span class="m-btn hot">'+pin(4)+' 複製</span></div></div>')); },
+  check:['記事本裡有一串 AIza 開頭、約 39 個字元的金鑰'],
+  pit:['金鑰等同密碼，不要截圖分享到群組','複製時不要多帶到空白或換行']
+};
+function S_CODE(pf){ return {
+  t:'把程式碼貼進 Apps Script', s:'做出中繼站', time:'8 分鐘', tool:'code',
+  why:'Google Apps Script 是 Google 免費提供、放在雲端的小程式空間。它就是我們的中繼站：收到 '+(pf==='line'?'LINE':'Telegram')+' 的訊息 → 問 Gemini → 把答案送回去。',
+  acts:[
+    '開啟 Apps Script，按左上 <span class="ui">新專案</span>。<br><a class="link-out" href="https://script.google.com/home" target="_blank" rel="noopener">開啟 Apps Script ↗</a>',
+    '點上方「未命名的專案」，改成好認的名字，例如「我的 AI 機器人」。',
+    '在下方小工具填入兩把鑰匙、選好機器人角色，按 <span class="ui">複製程式碼</span>。',
+    '回到 Apps Script，把編輯區原本的 <code class="inl">function myFunction()…</code> 全部刪掉，貼上程式碼，按 <kbd>Ctrl</kbd>＋<kbd>S</kbd>（Mac 用 <kbd>⌘</kbd>＋<kbd>S</kbd>）儲存。',
+    '上方函式選單選 <span class="ui">testGemini</span> → 按 <span class="ui">▶ 執行</span>。第一次會要求授權：<span class="ui">審查權限</span> → 選你的帳號 → <span class="ui">進階</span> → <span class="ui">前往（不安全）</span> → <span class="ui">允許</span>。',
+    '下方「執行記錄」出現 AI 的自我介紹，代表 Gemini 金鑰可以用了。'
+  ],
+  mock: function(){ return fig(win('script.google.com/…/edit',
+    '<div class="m-row"><span class="m-title hot">'+pin(2)+' 我的 AI 機器人</span><span style="flex:1"></span><span class="m-btn">💾</span><span class="m-btn hot">'+pin(5)+' ▶ 執行</span><span class="m-select">testGemini ▾</span><span class="m-btn pri">部署 ▾</span></div>'+
+    '<div class="m-code"><span style="color:var(--code-com)">// ===== 只要改這一區 =====</span>\nvar GEMINI_API_KEY = \'AIza…\';\nvar '+(pf==='line'?'LINE_TOKEN':'TG_TOKEN')+' = \'…\';\n\nfunction doPost(e) { … }</div>'+
+    '<div class="m-dialog hot" style="box-shadow:none"><div class="m-muted">'+pin(6)+' 執行記錄</div><div style="font-size:12px">資訊　您好！我是你的 AI 小幫手，很高興為你服務。</div></div>')); },
+  check:['執行 testGemini 後，執行記錄印出一句 AI 寫的自我介紹'],
+  pit:['看到「抱歉，AI 暫時無法回覆…」：金鑰貼錯或多了空白','函式選單要選 testGemini，選 doPost 執行會出現錯誤，這是正常的']
+};}
+function S_DEPLOY(pf){ return {
+  t:'部署成一個網址', s:'讓平台找得到中繼站', time:'5 分鐘', tool:'gasurl',
+  why:'程式要變成一個公開的網址，'+(pf==='line'?'LINE':'Telegram')+' 才能把訊息送進來。這個網址就像中繼站的門牌。',
+  acts:[
+    '右上角按 <span class="ui">部署</span> → <span class="ui">新增部署作業</span>。',
+    '「選取類型」旁的齒輪 ⚙ → 選 <span class="ui">網頁應用程式</span>。',
+    '說明隨意填；<b>執行身分</b>選「我」，<b>具有存取權的使用者</b>一定要選 <span class="ui">所有人</span>。',
+    '按 <span class="ui">部署</span>，複製「網頁應用程式」網址（結尾是 <code class="inl">/exec</code>），貼到下方小工具。'
+  ],
+  mock: function(){ return fig(win('script.google.com — 新增部署作業',
+    '<div class="m-dialog" style="box-shadow:none">'+
+    '<div class="m-row"><span class="m-title" style="font-size:13px">新增部署作業</span></div>'+
+    '<div class="m-kv"><span class="m-muted">選取類型</span><span class="hot" style="justify-self:start">'+pin(2)+' ⚙ 網頁應用程式</span></div>'+
+    '<div class="m-kv"><span class="m-muted">執行身分</span><span class="m-select">我（you@gmail.com）▾</span></div>'+
+    '<div class="m-kv"><span class="m-muted">存取權</span><span class="m-select hot">'+pin(3)+' 所有人 ▾</span></div>'+
+    '<div class="m-row" style="justify-content:flex-end"><span class="m-btn pri">部署</span></div></div>'+
+    '<div class="m-row"><span class="m-field">https://script.google.com/macros/s/AKfy…/exec</span><span class="m-btn hot">'+pin(4)+' 複製</span></div>')); },
+  check:['手上有一個 https://script.google.com/macros/s/…/exec 的網址'],
+  pit:['存取權選成「擁有 Google 帳戶的使用者」，平台會被擋在門外','之後改程式碼：部署 → 管理部署作業 → ✏️ 編輯 → 版本選「新版本」→ 部署。網址不變，但不做這步就還是舊程式']
+};}
+
+/* ---------- LINE steps ---------- */
+var LINE = [
+  S_GEMINI,
+  { t:'建立 LINE 官方帳號', s:'機器人的 LINE 身分', time:'5 分鐘',
+    why:'LINE 機器人其實就是一個「LINE 官方帳號」。免費方案就夠用，而且機器人「回覆」訊息不會扣免費則數。',
+    acts:[
+      '開啟 LINE 官方帳號管理後台，用你的 LINE 帳號登入。<br><a class="link-out" href="https://manager.line.biz/" target="_blank" rel="noopener">開啟 LINE Official Account Manager ↗</a>',
+      '按 <span class="ui">建立帳號</span>（或「建立 LINE 官方帳號」）。',
+      '填寫帳號名稱（例如「小明的 AI 助理」）、聯絡信箱、所在國家：台灣、業種隨意選。',
+      '確認內容後送出，看到「已完成申請」並進入帳號主頁。'
+    ],
+    mock: function(){ return fig(win('manager.line.biz',
+      '<div class="m-row" style="justify-content:space-between"><span class="m-title">帳號清單</span><span class="m-btn lg hot">'+pin(2)+' 建立帳號</span></div>'+
+      '<div class="m-dialog" style="box-shadow:none">'+
+      '<div class="m-kv"><span class="m-muted">帳號名稱</span><span class="m-field hot">'+pin(3)+' 小明的 AI 助理</span></div>'+
+      '<div class="m-kv"><span class="m-muted">電子郵件</span><span class="m-field">you@gmail.com</span></div>'+
+      '<div class="m-kv"><span class="m-muted">所在國家</span><span class="m-select">台灣 ▾</span></div>'+
+      '<div class="m-kv"><span class="m-muted">業種</span><span class="m-select">教育 ▾</span></div></div>')); },
+    check:['管理後台的帳號清單裡出現你的官方帳號'],
+    pit:['帳號名稱 7 天內只能改一次，先想好再填'] },
+  { t:'啟用 Messaging API', s:'打開機器人開關', time:'3 分鐘',
+    why:'官方帳號預設只能手動回覆。啟用 Messaging API 後，才能讓程式自動收發訊息。',
+    acts:[
+      '在官方帳號主頁，按右上角 <span class="ui">⚙ 設定</span>。',
+      '左側選單點 <span class="ui">Messaging API</span>，按 <span class="ui">啟用 Messaging API</span>。',
+      '選擇或建立一個「服務提供者」（Provider），名稱可用你的名字或單位名。',
+      '隱私權政策、服務條款網址可以先留空，按 <span class="ui">確定</span>。'
+    ],
+    mock: function(){ return fig(win('manager.line.biz/account/…/setting',
+      '<div class="m-side"><div class="m-nav"><span>帳號設定</span><span>回應設定</span><span class="on hot">'+pin(2)+' Messaging API</span><span>權限管理</span></div>'+
+      '<div class="m-main"><span class="m-title">Messaging API</span><span class="m-muted">狀態：未使用</span><span><span class="m-btn lg hot">'+pin(2)+' 啟用 Messaging API</span></span>'+
+      '<div class="m-dialog"><span class="m-muted">選擇服務提供者</span><span class="m-field hot">'+pin(3)+' ＋ 建立新的服務提供者：小明工作室</span><span style="align-self:flex-end"><span class="m-btn lg">確定</span></span></div></div></div>')); },
+    check:['Messaging API 頁顯示「使用中」，並出現 Channel ID'],
+    pit:['服務提供者名稱建立後不能修改，可以用你的名字'] },
+  { t:'取得 LINE 通行權杖', s:'Channel access token', time:'3 分鐘', tool:'token',
+    why:'通行權杖讓中繼站可以「以官方帳號的身分」回訊息。它和 Gemini 金鑰一樣要保密。',
+    acts:[
+      '開啟 LINE Developers，用同一個 LINE 帳號登入。<br><a class="link-out" href="https://developers.line.biz/console/" target="_blank" rel="noopener">開啟 LINE Developers Console ↗</a>',
+      '點剛剛建立的服務提供者 → 點你的官方帳號（Channel）。',
+      '上方分頁切到 <span class="ui">Messaging API</span>，捲到最下面。',
+      '在 <b>Channel access token (long-lived)</b> 按 <span class="ui">Issue</span>，複製出現的長字串，貼到下方小工具。'
+    ],
+    mock: function(){ return fig(win('developers.line.biz/console/channel/…',
+      '<div class="m-tabs"><span>Basic settings</span><span class="on hot">'+pin(3)+' Messaging API</span><span>LIFF</span><span>Security</span></div>'+
+      '<div class="m-muted">Bot basic ID　@123abcde　　QR code ▦</div>'+
+      '<div class="m-muted">Webhook settings …</div>'+
+      '<div class="m-title" style="font-size:13px">Channel access token (long-lived)</div>'+
+      '<div class="m-row"><span class="m-field">aB3xK9…（約 170 個字元）…Qz0=</span><span class="m-btn lg hot">'+pin(4)+' Issue</span></div>')); },
+    check:['拿到一串很長（約 170 字元）的權杖，結尾常是 = 號'],
+    pit:['不要拿成 Channel secret（在 Basic settings 分頁，只有 32 字元）','按 Reissue 會讓舊權杖失效，程式要跟著換'] },
+  null, // code
+  null, // deploy
+  { t:'把網址填進 LINE Webhook', s:'告訴 LINE 中繼站在哪', time:'3 分鐘',
+    why:'Webhook 就是「有人傳訊息時，LINE 要通知的網址」。填上中繼站網址，訊息才會流進你的程式。',
+    acts:[
+      '回到 LINE Developers → 你的 Channel → <span class="ui">Messaging API</span> 分頁。',
+      '找到 <b>Webhook settings</b> → Webhook URL 旁按 <span class="ui">Edit</span>，貼上 <code class="inl">/exec</code> 網址 → <span class="ui">Update</span>。',
+      '把 <b>Use webhook</b> 開關打開（變綠色）。',
+      '同一頁往下，<b>Auto-reply messages</b> 旁按 <span class="ui">Edit</span>，會跳到官方帳號後台的「回應設定」：把 <b>自動回應訊息</b> 關閉、<b>Webhook</b> 開啟。'
+    ],
+    mock: function(){ return fig(win('developers.line.biz/console/channel/…/messaging-api',
+      '<div class="m-tabs"><span>Basic settings</span><span class="on">Messaging API</span><span>LIFF</span></div>'+
+      '<div class="m-title" style="font-size:13px">Webhook settings</div>'+
+      '<div class="m-row"><span class="m-muted" style="width:86px">Webhook URL</span><span class="m-field hot">'+pin(2)+' https://script.google.com/macros/s/…/exec</span><span class="m-btn">Verify</span></div>'+
+      '<div class="m-row"><span class="m-muted" style="width:86px">Use webhook</span><span class="m-toggle hot"></span>'+pin(3)+'</div>'+
+      '<div class="m-dialog" style="box-shadow:none"><span class="m-muted">官方帳號後台 › 回應設定</span>'+
+      '<div class="m-row"><span style="flex:1">自動回應訊息</span><span class="m-toggle off hot"></span>'+pin(4)+'</div>'+
+      '<div class="m-row"><span style="flex:1">Webhook</span><span class="m-toggle"></span></div></div>')); },
+    check:['Use webhook 是綠色開啟','回應設定裡：自動回應訊息關閉、Webhook 開啟'],
+    pit:['自動回應沒關，會先收到「感謝您的訊息…」罐頭回覆','Verify 顯示錯誤不一定有問題，下一步實際傳訊息測試才準'] },
+  { t:'加好友、開始聊天', s:'驗收！', time:'2 分鐘',
+    why:'最後用手機加機器人好友，傳一句話。整條路線都通的話，幾秒內就會收到 Gemini 的回答。',
+    acts:[
+      'LINE Developers 的 Messaging API 分頁最上方有 <b>QR code</b>，用手機 LINE 掃描加入好友。',
+      '傳一句話，例如「高血壓的人早餐可以吃什麼？」',
+      '等 3～10 秒，收到 AI 的回覆就成功了！',
+      '想換機器人個性：回第 5 步改角色，重新複製程式碼貼上，再「部署新版本」。'
+    ],
+    mock: function(){ return fig(phone('line','小明的 AI 助理',
+      '<div class="bub me">高血壓的人早餐可以吃什麼？</div>'+
+      '<div class="bub">可以這樣吃：<br>・無糖豆漿或低脂牛奶<br>・燕麥、全麥吐司<br>・一份水果，例如香蕉<br>少吃醬菜、肉鬆這類鹹的配菜喔！</div>'), '示意圖：機器人在 LINE 裡的回覆'); },
+    check:['手機 LINE 收到 AI 的回答'],
+    pit:['沒反應？看頁面下方「卡住了？」的第一題'] }
+];
+LINE[4] = S_CODE('line'); LINE[5] = S_DEPLOY('line');
+
+/* ---------- Telegram steps ---------- */
+var TG = [
+  S_GEMINI,
+  { t:'跟 BotFather 申請機器人', s:'拿到 Telegram token', time:'3 分鐘', tool:'token',
+    why:'Telegram 官方用一個叫 BotFather 的機器人來幫大家建立機器人。聊幾句就能拿到 token（機器人的通行權杖）。',
+    acts:[
+      '在 Telegram 搜尋 <b>@BotFather</b>（名字旁有藍色勾勾的才是官方），按 <span class="ui">開始</span>。<br><a class="link-out" href="https://t.me/BotFather" target="_blank" rel="noopener">開啟 BotFather ↗</a>',
+      '傳送 <code class="inl">/newbot</code>。',
+      '它會問機器人的名字：輸入顯示名稱，例如「小明的 AI 助理」。',
+      '再問帳號名稱：必須是英文、結尾是 <code class="inl">bot</code>，例如 <code class="inl">xiaoming_ai_bot</code>。',
+      '成功後會收到一段訊息，裡面 <code class="inl">123456789:AA…</code> 格式的字串就是 token，複製貼到下方小工具。'
+    ],
+    mock: function(){ return fig(phone('tg','BotFather ✔',
+      '<div class="bub me">'+pin(2)+' /newbot</div>'+
+      '<div class="bub">Alright, a new bot. How are we going to call it?</div>'+
+      '<div class="bub me">'+pin(3)+' 小明的 AI 助理</div>'+
+      '<div class="bub">Now choose a username… It must end in `bot`.</div>'+
+      '<div class="bub me">'+pin(4)+' xiaoming_ai_bot</div>'+
+      '<div class="bub tok">Done! … Use this token to access the HTTP API:<br><code>7712345678:AAHk3x…9Qw</code> '+pin(5)+'</div>'), '示意圖：和 BotFather 的對話'); },
+    check:['拿到一串「數字:英文」格式的 token'],
+    pit:['帳號名稱被用走了就換一個，例如加上數字','token 外洩時對 BotFather 傳 /revoke 重發'] },
+  null, null,
+  { t:'把網址告訴 Telegram', s:'設定 Webhook', time:'2 分鐘', tool:'webhook',
+    why:'Telegram 需要知道「有人傳訊息時要通知哪個網址」。我們用瀏覽器打開一個特製網址，就能完成設定。',
+    acts:[
+      '確認下方小工具已填好 token 和 <code class="inl">/exec</code> 網址（前兩步填過就會自動帶入）。',
+      '按 <span class="ui">開啟設定網址</span>，瀏覽器會開一個新分頁。',
+      '畫面出現 <code class="inl">"ok":true</code> 和 <code class="inl">Webhook was set</code> 就成功了。'
+    ],
+    mock: function(){ return fig(win('api.telegram.org/bot7712…/setWebhook?url=…',
+      '<div class="m-code hot" style="white-space:pre-wrap">'+pin(3)+' {"ok":true,"result":true,\n "description":"Webhook was set"}</div>')); },
+    check:['瀏覽器分頁顯示 "ok":true 與 Webhook was set'],
+    pit:['顯示 Unauthorized：token 貼錯','顯示 bad webhook：網址不是 https 開頭或貼錯'] },
+  { t:'開始聊天', s:'驗收！', time:'2 分鐘',
+    why:'在 Telegram 找到你的機器人，傳一句話。路線都通的話，幾秒內就會收到 Gemini 的回答。',
+    acts:[
+      'Telegram 搜尋你的機器人帳號（例如 @xiaoming_ai_bot），或點 BotFather 給你的 t.me 連結。',
+      '按 <span class="ui">開始</span>（會送出 /start），機器人會打招呼。',
+      '傳一句話，例如「幫我用三點說明什麼是失智症」，等幾秒收到回覆就成功了！',
+      '想換機器人個性：回第 3 步改角色，重新複製程式碼貼上，再「部署新版本」。'
+    ],
+    mock: function(){ return fig(phone('tg','小明的 AI 助理',
+      '<div class="bub me">/start</div><div class="bub">嗨！我是 AI 小幫手，直接打字問我吧。</div>'+
+      '<div class="bub me">幫我用三點說明什麼是失智症</div>'+
+      '<div class="bub">1. 大腦功能退化，不只是健忘<br>2. 會影響記憶、判斷和生活能力<br>3. 及早就醫評估，有助延緩惡化</div>'), '示意圖：機器人在 Telegram 裡的回覆'); },
+    check:['Telegram 收到 AI 的回答'],
+    pit:['同一題回兩次：請確認用的是本頁最新程式碼'] }
+];
+TG[2] = S_CODE('telegram'); TG[3] = S_DEPLOY('telegram');
+
+var TRACKS = { line: LINE, telegram: TG };
+function cur(){ return TRACKS[state.pf]; }
+function doneKey(){ return 'aibot-done-' + state.pf; }
+function getDone(){ return store(doneKey()) || []; }
+function setDone(arr){ store(doneKey(), arr); }
+
+/* ---------- flow ---------- */
+function renderFlow(){
+  var pfName = state.pf==='line' ? 'LINE' : 'Telegram';
+  var nodes = [
+    ['STEP A','學員的手機','在 '+pfName+' 傳一句話'],
+    ['STEP B', pfName+' 伺服器','把訊息轉給 Webhook 網址'],
+    ['STEP C','Apps Script 中繼站','你貼上的程式碼，免費放在 Google 雲端'],
+    ['STEP D','Gemini AI','想出答案'],
+    ['STEP E','回到手機','中繼站把答案送回 '+pfName]
+  ];
+  $('#flowRow').innerHTML = nodes.map(function(n, i){
+    return (i ? '<span class="arrow">→</span>' : '') + '<div class="node'+(i===2?' key':'')+'"><span class="ic">'+n[0]+'</span><b>'+n[1]+'</b><span>'+n[2]+'</span></div>';
+  }).join('');
+  $('#prepPf').textContent = state.pf==='line' ? 'LINE 帳號（手機）' : 'Telegram 帳號（手機或電腦版）';
+}
+
+/* ---------- step list ---------- */
+function renderList(){
+  var done = getDone(), steps = cur();
+  $('#stepList').innerHTML = steps.map(function(st, i){
+    return '<li class="'+(done.indexOf(i)>=0?'done':'')+'"><button data-i="'+i+'"'+(i===state.idx?' aria-current="step"':'')+'><span class="num">'+(done.indexOf(i)>=0?'✓':(i+1))+'</span><span>'+st.t+'<small>'+st.s+'・'+st.time+'</small></span></button></li>';
+  }).join('');
+  $('#progTxt').textContent = done.length + ' / ' + steps.length;
+  $('#progBar').style.width = (done.length / steps.length * 100) + '%';
+}
+
+/* ---------- tools ---------- */
+function toolHTML(kind){
+  var pfName = state.pf==='line' ? 'LINE' : 'Telegram';
+  var tokLabel = state.pf==='line' ? 'LINE Channel access token' : 'Telegram token';
+  if(kind === 'token'){
+    return '<div class="tool"><h3>小工具：先把 '+tokLabel+' 放這裡</h3><p>只暫存在這個分頁，重新整理就會清空，不會上傳。第 '+(state.pf==='line'?5:3)+' 步產生程式碼時會自動帶入。</p>'+
+      '<div class="fields"><label class="fld">'+tokLabel+'<input id="in-tok" autocomplete="off" spellcheck="false" placeholder="'+(state.pf==='line'?'貼上約 170 字元的權杖':'例如 7712345678:AAHk…')+'" value="'+esc(state.pfToken)+'"></label></div>'+
+      '<span class="toast" id="tokMsg"></span></div>';
+  }
+  if(kind === 'code'){
+    var chips = Object.keys(PERSONAS).map(function(k){ return '<button type="button" data-persona="'+k+'">'+k+'</button>'; }).join('');
+    return '<div class="tool"><h3>小工具：產生你的程式碼</h3><p>填好後按「複製程式碼」，貼到 Apps Script。金鑰只在你的瀏覽器裡組合，不會上傳或儲存。也可以不填，貼上後再手動把中文提示換成金鑰。</p>'+
+      '<div class="fields">'+
+        '<label class="fld">Gemini API 金鑰（第 1 步）<input id="in-gem" autocomplete="off" spellcheck="false" placeholder="AIza…" value="'+esc(state.gemKey)+'"></label>'+
+        '<label class="fld">'+tokLabel+'（第 '+(state.pf==='line'?4:2)+' 步）<input id="in-tok" autocomplete="off" spellcheck="false" placeholder="貼上 '+pfName+' 權杖" value="'+esc(state.pfToken)+'"></label>'+
+      '</div>'+
+      '<label class="fld">機器人的角色（SYSTEM_PROMPT）<div class="presets">'+chips+'</div><textarea id="in-persona">'+esc(state.persona)+'</textarea></label>'+
+      '<div class="code-wrap"><button class="copy" id="copyCode">複製程式碼</button><pre class="code" id="codeOut"></pre></div></div>';
+  }
+  if(kind === 'gasurl'){
+    return '<div class="tool"><h3>小工具：貼上你的 /exec 網址</h3><p>下一步會用到。只暫存在這個分頁。</p>'+
+      '<label class="fld">網頁應用程式網址<input id="in-gas" autocomplete="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec" value="'+esc(state.gasUrl)+'"></label>'+
+      '<span class="toast" id="gasMsg"></span></div>';
+  }
+  if(kind === 'webhook'){
+    return '<div class="tool"><h3>小工具：產生 Telegram 設定網址</h3><p>網址只在你的瀏覽器裡組合，會直接開到 Telegram 官方的 api.telegram.org。</p>'+
+      '<div class="fields"><label class="fld">Telegram token<input id="in-tok" autocomplete="off" spellcheck="false" placeholder="7712345678:AAHk…" value="'+esc(state.pfToken)+'"></label>'+
+      '<label class="fld">Apps Script /exec 網址<input id="in-gas" autocomplete="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec" value="'+esc(state.gasUrl)+'"></label></div>'+
+      '<div class="outurl" id="whUrl"></div>'+
+      '<div class="row-btns"><a class="btn" id="whOpen" target="_blank" rel="noopener">開啟設定網址 ↗</a><a class="btn sec" id="whInfo" target="_blank" rel="noopener">查看目前設定 ↗</a><span class="toast" id="gasMsg"></span></div></div>';
+  }
+  return '';
+}
+function wireTool(kind){
+  var tok = $('#in-tok'), gem = $('#in-gem'), per = $('#in-persona'), gas = $('#in-gas');
+  function refreshCode(){ var o = $('#codeOut'); if(o) o.innerHTML = highlight(codeFor(state.pf)); }
+  function checkTok(){
+    var m = $('#tokMsg'); if(!m) return; var v = state.pfToken.trim();
+    if(!v){ m.textContent=''; return; }
+    if(state.pf==='telegram') m.textContent = /^\d+:[\w-]{30,}$/.test(v) ? '✓ 格式看起來正確' : '格式應該是「數字:英文字串」，請再檢查';
+    else m.textContent = v.length > 100 ? '✓ 長度看起來正確' : '有點短，是不是拿成 Channel secret 了？';
+  }
+  function checkGas(){
+    var m = $('#gasMsg'); var v = state.gasUrl.trim();
+    if(m) m.textContent = !v ? '' : (/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(v) ? '✓ 網址格式正確' : (/\/dev$/.test(v) ? '這是測試網址，請用結尾 /exec 的部署網址' : '網址應該以 https://script.google.com/macros/s/ 開頭、/exec 結尾'));
+    var w = $('#whUrl');
+    if(w){
+      var t = state.pfToken.trim(), ok = t && v;
+      var url = 'https://api.telegram.org/bot' + (t || '〈token〉') + '/setWebhook?url=' + encodeURIComponent(v || '〈你的 exec 網址〉') + '&drop_pending_updates=true';
+      w.textContent = url;
+      var a = $('#whOpen'), b = $('#whInfo');
+      if(ok){ a.href = url; a.removeAttribute('aria-disabled'); a.style.opacity=''; } else { a.removeAttribute('href'); a.setAttribute('aria-disabled','true'); a.style.opacity='.4'; }
+      if(t){ b.href = 'https://api.telegram.org/bot' + t + '/getWebhookInfo'; b.style.opacity=''; } else { b.removeAttribute('href'); b.style.opacity='.4'; }
+    }
+  }
+  if(tok) tok.addEventListener('input', function(){ state.pfToken = tok.value; refreshCode(); checkTok(); checkGas(); });
+  if(gem) gem.addEventListener('input', function(){ state.gemKey = gem.value; refreshCode(); });
+  if(per) per.addEventListener('input', function(){ state.persona = per.value; refreshCode(); });
+  if(gas) gas.addEventListener('input', function(){ state.gasUrl = gas.value; checkGas(); });
+  document.querySelectorAll('[data-persona]').forEach(function(b){
+    b.addEventListener('click', function(){ state.persona = PERSONAS[b.dataset.persona]; per.value = state.persona; refreshCode(); });
+  });
+  var cp = $('#copyCode');
+  if(cp) cp.addEventListener('click', function(){
+    var text = codeFor(state.pf);
+    var done = function(){ cp.textContent = '已複製 ✓'; setTimeout(function(){ cp.textContent = '複製程式碼'; }, 1800); };
+    var fallback = function(){ var r = document.createRange(); r.selectNodeContents($('#codeOut')); var s = getSelection(); s.removeAllRanges(); s.addRange(r); cp.textContent = '已選取，請按 Ctrl/⌘＋C'; };
+    try { navigator.clipboard.writeText(text).then(done, fallback); } catch(e){ fallback(); }
+  });
+  refreshCode(); checkTok(); checkGas();
+}
+
+/* ---------- panel ---------- */
+function renderPanel(){
+  var steps = cur(), st = steps[state.idx], done = getDone(), isDone = done.indexOf(state.idx) >= 0;
+  var pfName = state.pf==='line' ? 'LINE' : 'Telegram';
+  var h = '<div class="phead"><span class="eyebrow">'+pfName+'・第 '+(state.idx+1)+' 步 / 共 '+steps.length+' 步</span><h2>'+st.t+'</h2><p class="why">'+st.why+'</p><div class="meta"><span>⏱ 約 '+st.time+'</span><span>'+st.s+'</span></div></div>';
+  h += '<div class="cols"><ol class="actions">'+st.acts.map(function(a){ return '<li><div>'+a+'</div></li>'; }).join('')+'</ol>'+st.mock()+'</div>';
+  if(st.tool) h += toolHTML(st.tool);
+  h += '<div class="boxes"><div class="box check"><h3>✓ 做完的樣子</h3><ul>'+st.check.map(function(c){ return '<li>'+c+'</li>'; }).join('')+'</ul></div>'+
+       '<div class="box pit"><h3>! 常見卡關</h3><ul>'+st.pit.map(function(c){ return '<li>'+c+'</li>'; }).join('')+'</ul></div></div>';
+  h += '<div class="nav"><button class="btn sec" id="prevBtn"'+(state.idx===0?' disabled':'')+'>← 上一步</button>'+
+       '<label class="donebox"><input type="checkbox" id="doneChk"'+(isDone?' checked':'')+'>這一步我完成了</label>'+
+       (state.idx < steps.length-1 ? '<button class="btn" id="nextBtn">下一步 →</button>' : '<span class="toast">'+(done.length===steps.length?'🎉 全部完成！':'最後一步')+'</span>')+'</div>';
+  $('#panel').innerHTML = h;
+  if(st.tool) wireTool(st.tool);
+  $('#prevBtn').onclick = function(){ go(state.idx-1); };
+  var nb = $('#nextBtn'); if(nb) nb.onclick = function(){ markDone(state.idx, true); go(state.idx+1); };
+  $('#doneChk').onchange = function(e){ markDone(state.idx, e.target.checked); renderPanel(); };
+}
+function markDone(i, on){
+  var d = getDone().filter(function(x){ return x !== i; }); if(on) d.push(i); setDone(d); renderList();
+}
+function go(i, noScroll){
+  state.idx = Math.max(0, Math.min(cur().length-1, i));
+  store('aibot-idx-'+state.pf, state.idx);
+  renderList(); renderPanel();
+  if(!noScroll && window.innerWidth < 860){ $('#panel').scrollIntoView({behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block:'start'}); }
+}
+function setPf(pf, fromHash){
+  if(pf !== state.pf){ state.pfToken = ''; }
+  state.pf = pf;
+  document.body.dataset.platform = pf;
+  document.querySelectorAll('[data-pf]').forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.pf === pf)); });
+  if(!fromHash && location.hash !== '#'+pf){ try{ history.replaceState(null, '', '#'+pf); }catch(e){ location.hash = pf; } }
+  var saved = store('aibot-idx-'+pf);
+  state.idx = typeof saved === 'number' ? saved : 0;
+  renderFlow(); go(state.idx, true);
+}
+
+/* ---------- events ---------- */
+$('#stepList').addEventListener('click', function(e){ var b = e.target.closest('button[data-i]'); if(b) go(+b.dataset.i); });
+document.querySelectorAll('[data-pf]').forEach(function(b){ b.addEventListener('click', function(){ setPf(b.dataset.pf); }); });
+$('#resetBtn').addEventListener('click', function(){ setDone([]); go(0, true); });
+$('#bigBtn').addEventListener('click', function(){
+  var on = !document.body.classList.contains('big'); document.body.classList.toggle('big', on);
+  this.setAttribute('aria-pressed', String(on)); store('aibot-big', on);
+});
+window.addEventListener('hashchange', function(){ var h = location.hash.slice(1); if(TRACKS[h] && h !== state.pf) setPf(h, true); });
+
+if(store('aibot-big')){ document.body.classList.add('big'); $('#bigBtn').setAttribute('aria-pressed','true'); }
+var h0 = location.hash.slice(1);
+state.pf = '';
+setPf(TRACKS[h0] ? h0 : (store('aibot-pf-last') || 'line'), !!TRACKS[h0]);
+document.querySelectorAll('[data-pf]').forEach(function(b){ b.addEventListener('click', function(){ store('aibot-pf-last', b.dataset.pf); }); });
+})();
+</script>
+<script>
+window.addEventListener('load', function(){
+  var host = document.querySelector('[data-oth-report]'); if(!host || !host.shadowRoot) return;
+  var st = document.createElement('style');
+  st.textContent = '.fab{width:34px;height:34px;padding:0;gap:0;justify-content:center;font-size:0;opacity:.72;right:14px;box-shadow:0 2px 8px rgba(0,0,0,.14),0 0 0 1.5px #06A04A inset;transition:opacity .2s}.fab:hover,.fab:focus-visible{opacity:1;width:auto;padding:0 12px;gap:6px;font-size:12.5px}.fab svg{width:15px;height:15px}';
+  host.shadowRoot.appendChild(st);
+  var fab = host.shadowRoot.querySelector('.fab'); if(fab){ fab.title = '回報錯誤或建議'; fab.setAttribute('aria-label','回報錯誤或建議'); }
+});
+</script>
+<script src="https://mattsue1003.github.io/oth-report-button/report.js" data-site="AI 機器人串接教室" data-color="#06A04A" data-label="錯誤／建議" data-offset="16" defer></script>
