@@ -254,7 +254,9 @@ footer{font-size:.8em; color:var(--muted); text-align:center}
         <li>LINE：確認「Use webhook」已開啟，且官方帳號的「回應設定」裡 Webhook 是開的。</li>
       </ul></details>
     <details><summary>機器人回覆「抱歉，AI 暫時無法回覆」</summary>
-      <p>這代表 LINE / Telegram 那一半已經通了，問題在 Gemini 這一端。後面接的訊息就是原因：常見是金鑰貼錯（多了空白）、模型名稱已經改版，或短時間問太多次超過免費額度。到 Apps Script 執行 <code class="inl">testGemini</code> 就能看到詳細錯誤。</p></details>
+      <p>這代表 LINE / Telegram 那一半已經通了，問題在 Gemini 這一端。後面接的訊息就是原因：常見是金鑰貼錯（多了空白），或短時間問太多次超過免費額度。到 Apps Script 執行 <code class="inl">testGemini</code> 就能看到詳細錯誤。</p></details>
+    <details><summary>出現「This model … is no longer available」</summary>
+      <p>Google 會定期停用舊的 Gemini 模型。新版範例程式碼已經會在模型停用時，自動改用最新的 Flash 模型（<code class="inl">gemini-flash-latest</code>）。如果還是出現這個錯誤：到「貼上程式碼」那一步，把「Gemini 模型名稱」換成錯誤訊息裡建議的名稱，重新複製程式碼貼上、儲存，再到「管理部署作業」部署「新版本」。</p></details>
     <details><summary>LINE 按下 Verify 出現錯誤</summary>
       <p>Apps Script 的網址會先轉址一次，有時 Verify 會顯示失敗。直接用手機傳一則訊息測試；只要機器人有回覆，這個錯誤可以忽略。</p></details>
     <details><summary>Telegram 機器人同一個問題回了兩次以上</summary>
@@ -291,7 +293,8 @@ function phone(kind, title, bubbles){
 }
 
 /* ---------- state ---------- */
-var state = { pf: 'line', idx: 0, gemKey: '', pfToken: '', persona: '', gasUrl: '' };
+var DEFAULT_MODEL = 'gemini-3.8-flash';
+var state = { pf: 'line', idx: 0, gemKey: '', pfToken: '', persona: '', gasUrl: '', model: DEFAULT_MODEL };
 var PERSONAS = {
   '一般小幫手': '你是一位親切的 AI 小幫手，請用繁體中文（台灣用語）回答，回答簡潔、條列重點，不超過 200 字。',
   '衛教小幫手': '你是醫療團隊的衛教小幫手，用長輩聽得懂的繁體中文回答健康問題，句子短、多舉生活例子。遇到疑似急症或需要診斷的問題，提醒對方盡快就醫或詢問醫師，不要自行下診斷。',
@@ -304,9 +307,20 @@ state.persona = PERSONAS['一般小幫手'];
 function q(s){ return "'" + String(s).replace(/\\/g,'\\\\').replace(/'/g, "\\'").replace(/\n/g,' ') + "'"; }
 var GEMINI_PART = [
 "",
-"// ---- 問 Gemini ----",
+"// ---- 問 Gemini（模型停用時自動改用最新的 Flash 模型）----",
 "function askGemini(text) {",
-"  var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + MODEL + ':generateContent';",
+"  var data = callGemini(MODEL, text);",
+"  var gone = data.error && (data.error.code === 404 || /model/i.test(data.error.message));",
+"  if (gone && MODEL !== BACKUP_MODEL) data = callGemini(BACKUP_MODEL, text);",
+"  try {",
+"    return data.candidates[0].content.parts.map(function (p) { return p.text || ''; }).join('');",
+"  } catch (err) {",
+"    return '抱歉，AI 暫時無法回覆：' + (data.error ? data.error.message : '沒有收到答案');",
+"  }",
+"}",
+"",
+"function callGemini(model, text) {",
+"  var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent';",
 "  var res = UrlFetchApp.fetch(url, {",
 "    method: 'post',",
 "    contentType: 'application/json',",
@@ -317,12 +331,7 @@ var GEMINI_PART = [
 "    }),",
 "    muteHttpExceptions: true",
 "  });",
-"  var data = JSON.parse(res.getContentText());",
-"  try {",
-"    return data.candidates[0].content.parts.map(function (p) { return p.text || ''; }).join('');",
-"  } catch (err) {",
-"    return '抱歉，AI 暫時無法回覆：' + (data.error ? data.error.message : '沒有收到答案');",
-"  }",
+"  return JSON.parse(res.getContentText());",
 "}",
 "",
 "// ---- 擋掉平台重送的同一則訊息 ----",
@@ -347,7 +356,8 @@ function codeFor(pf){
 "// ===== 只要改這一區 =====",
 "var GEMINI_API_KEY = " + q(key) + ";",
 (pf==='line' ? "var LINE_TOKEN = " : "var TG_TOKEN = ") + q(tok) + ";",
-"var MODEL = 'gemini-2.5-flash';   // 可到 AI Studio 查最新模型名稱",
+"var MODEL = " + q(state.model.trim() || DEFAULT_MODEL) + ";   // 模型名稱，可到 AI Studio 查最新的",
+"var BACKUP_MODEL = 'gemini-flash-latest';   // 上面的模型停用時改用這個",
 "var SYSTEM_PROMPT = " + q(state.persona || PERSONAS['一般小幫手']) + ";",
 "// =========================",
 ""];
@@ -649,6 +659,7 @@ function toolHTML(kind){
         '<label class="fld">'+tokLabel+'（第 '+(state.pf==='line'?4:2)+' 步）<input id="in-tok" autocomplete="off" spellcheck="false" placeholder="貼上 '+pfName+' 權杖" value="'+esc(state.pfToken)+'"></label>'+
       '</div>'+
       '<label class="fld">機器人的角色（SYSTEM_PROMPT）<div class="presets">'+chips+'</div><textarea id="in-persona">'+esc(state.persona)+'</textarea></label>'+
+      '<label class="fld">Gemini 模型名稱（通常不用改；出現「model is no longer available」時，換成錯誤訊息建議的名稱）<input id="in-model" autocomplete="off" spellcheck="false" value="'+esc(state.model)+'"></label>'+
       '<div class="code-wrap"><button class="copy" id="copyCode">複製程式碼</button><pre class="code" id="codeOut"></pre></div></div>';
   }
   if(kind === 'gasurl'){
@@ -666,7 +677,8 @@ function toolHTML(kind){
   return '';
 }
 function wireTool(kind){
-  var tok = $('#in-tok'), gem = $('#in-gem'), per = $('#in-persona'), gas = $('#in-gas');
+  var tok = $('#in-tok'), gem = $('#in-gem'), per = $('#in-persona'), gas = $('#in-gas'), mdl = $('#in-model');
+  if(mdl) mdl.addEventListener('input', function(){ state.model = mdl.value; refreshCode(); });
   function refreshCode(){ var o = $('#codeOut'); if(o) o.innerHTML = highlight(codeFor(state.pf)); }
   function checkTok(){
     var m = $('#tokMsg'); if(!m) return; var v = state.pfToken.trim();
