@@ -269,9 +269,18 @@ footer{font-size:.8em; color:var(--muted); text-align:center}
     <details><summary>出現「This model is currently experiencing high demand」</summary>
       <p>這是 Google 那邊太多人同時使用 Gemini，暫時忙線，不是你的設定錯了，通常過幾分鐘就會恢復。新版範例程式碼遇到忙線，會自動改用備用模型。如果全部模型都忙線，機器人會回「Google 的 AI 現在太多人使用，請過一兩分鐘再問一次」。上課時全班同時測試特別容易遇到，可以請學員錯開幾秒再按執行。</p></details>
     <details><summary>LINE 按下 Verify 出現錯誤</summary>
-      <p>Apps Script 的網址會先轉址一次，有時 Verify 會顯示失敗。直接用手機傳一則訊息測試；只要機器人有回覆，這個錯誤可以忽略。</p></details>
+      <p>新版範例程式碼按 Verify 應該會顯示 Success。如果顯示失敗：確認用的是本頁最新的程式碼、已經部署「新版本」、網址結尾是 <code class="inl">/exec</code>、存取權是「所有人」。也可以直接用手機傳一則訊息測試，機器人有回覆就代表通了。</p></details>
+    <details><summary>Telegram：/start 有回，後面的問題都沒反應</summary>
+      <p>舊版範例程式的回應方式會被 Google 轉址，Telegram 以為沒送到，就一直重送同一則訊息，後面的訊息全部卡在排隊。修法：</p>
+      <ul>
+        <li>回「貼上程式碼」那一步重新複製程式碼（新版最後一行是 <code class="inl">HtmlService.createHtmlOutput</code>），整份換掉、存檔。</li>
+        <li>「部署 → 管理部署作業 → 編輯 → 版本：新版本 → 部署」。</li>
+        <li>回「把網址告訴 Telegram」那一步，再按一次 <span class="ui">開啟設定網址</span>，這會順便清掉卡住的舊訊息。</li>
+        <li>想確認狀況：同一步按 <span class="ui">查看目前設定</span>。<code class="inl">pending_update_count</code> 是排隊中的訊息數，正常是 0；<code class="inl">last_error_message</code> 出現 302 就是這個問題。</li>
+        <li>還是沒反應：Apps Script 左側的 <span class="ui">執行項目</span>（三條線加箭頭的圖示）可以看到每次 doPost 有沒有被呼叫、有沒有失敗。</li>
+      </ul></details>
     <details><summary>Telegram 機器人同一個問題回了兩次以上</summary>
-      <p>Telegram 收到 Apps Script 的轉址回應時，可能會以為沒送到而重送。範例程式已經用 <code class="inl">isDuplicate</code> 擋掉重複訊息；如果你用的是舊版程式，請重新複製本頁的程式碼，再部署「新版本」。</p></details>
+      <p>舊版程式的回應會被轉址，Telegram 以為沒送到而重送。請重新複製本頁的程式碼，再部署「新版本」。新版另外用 <code class="inl">isDuplicate</code> 擋掉重複訊息。</p></details>
     <details><summary>Google 跳出「這個應用程式未經 Google 驗證」</summary>
       <p>這是你自己寫的程式，Google 沒有審核過才會這樣提示。點 <span class="ui">進階</span> → <span class="ui">前往「專案名稱」（不安全）</span> → <span class="ui">允許</span> 即可。只授權給你自己的 Google 帳號。</p></details>
     <details><summary>金鑰外洩了怎麼辦？</summary>
@@ -331,11 +340,11 @@ var GEMINI_PART = [
 "    if ([404, 429, 500, 502, 503].indexOf(data.error.code) < 0) break;   // 金鑰錯誤等問題，換模型也沒用",
 "    if (Date.now() - start > 20000) break;   // 已經等超過 20 秒，不再換模型",
 "  }",
+"  var answer = '';",
 "  try {",
-"    return data.candidates[0].content.parts.map(function (p) { return p.text || ''; }).join('');",
-"  } catch (err) {",
-"    return explainError(data.error);",
-"  }",
+"    answer = data.candidates[0].content.parts.map(function (p) { return p.text || ''; }).join('').trim();",
+"  } catch (err) {}",
+"  return answer || explainError(data.error);",
 "}",
 "",
 "// ---- 把 Gemini 的英文錯誤翻成看得懂的話 ----",
@@ -423,13 +432,19 @@ function codeFor(pf){
 ""];
   var body = pf==='line' ? [
 "// ---- LINE 傳訊息進來時會執行這裡 ----",
+"// 最後回傳 HtmlService，LINE 才會收到「成功」的回應（用 ContentService 會被轉址）",
 "function doPost(e) {",
 "  var body = JSON.parse(e.postData.contents);",
 "  (body.events || []).forEach(function (ev) {",
 "    if (ev.type !== 'message' || ev.message.type !== 'text') return;",
 "    if (isDuplicate(ev.webhookEventId)) return;",
 "    if (ev.source && ev.source.type === 'user') showLoading(ev.source.userId);",
-"    var answer = askGemini(ev.message.text);",
+"    var answer;",
+"    try {",
+"      answer = askGemini(ev.message.text);",
+"    } catch (err) {",
+"      answer = '程式出錯了：' + err.message;   // 出錯時也回一句，不要沒反應",
+"    }",
 "    UrlFetchApp.fetch('https://api.line.me/v2/bot/message/reply', {",
 "      method: 'post',",
 "      contentType: 'application/json',",
@@ -441,7 +456,7 @@ function codeFor(pf){
 "      muteHttpExceptions: true",
 "    });",
 "  });",
-"  return ContentService.createTextOutput('OK');",
+"  return HtmlService.createHtmlOutput('OK');",
 "}",
 "",
 "// ---- 等 AI 回答時，在聊天室顯示「⋯」輸入中動畫（只有一對一聊天有效）----",
@@ -456,18 +471,23 @@ function codeFor(pf){
 "}"
   ] : [
 "// ---- Telegram 傳訊息進來時會執行這裡 ----",
+"// 最後一定要回傳 HtmlService：用 ContentService 會被轉址，Telegram 會當成失敗一直重送，後面的訊息就卡住",
 "function doPost(e) {",
 "  var update = JSON.parse(e.postData.contents);",
 "  var msg = update.message;",
-"  if (!msg || !msg.text) return ContentService.createTextOutput('OK');",
-"  if (isDuplicate('tg' + update.update_id)) return ContentService.createTextOutput('OK');",
-"  if (msg.text === '/start') {",
-"    sendTG(msg.chat.id, '嗨！我是 AI 小幫手，直接打字問我吧。');",
-"  } else {",
-"    callTG('sendChatAction', { chat_id: msg.chat.id, action: 'typing' });   // 顯示「輸入中…」",
-"    sendTG(msg.chat.id, askGemini(msg.text));",
+"  if (!msg || !msg.text) return HtmlService.createHtmlOutput('OK');",
+"  if (isDuplicate('tg' + update.update_id)) return HtmlService.createHtmlOutput('OK');",
+"  try {",
+"    if (msg.text === '/start') {",
+"      sendTG(msg.chat.id, '嗨！我是 AI 小幫手，直接打字問我吧。');",
+"    } else {",
+"      callTG('sendChatAction', { chat_id: msg.chat.id, action: 'typing' });   // 顯示「輸入中…」",
+"      sendTG(msg.chat.id, askGemini(msg.text));",
+"    }",
+"  } catch (err) {",
+"    sendTG(msg.chat.id, '程式出錯了：' + err.message);   // 出錯時也回一句，不要沒反應",
 "  }",
-"  return ContentService.createTextOutput('OK');",
+"  return HtmlService.createHtmlOutput('OK');",
 "}",
 "",
 "function sendTG(chatId, text) {",
@@ -669,7 +689,7 @@ var TG = [
     mock: function(){ return fig(win('api.telegram.org/bot7712…/setWebhook?url=…',
       '<div class="m-code hot" style="white-space:pre-wrap">'+pin(3)+' {"ok":true,"result":true,\n "description":"Webhook was set"}</div>')); },
     check:['瀏覽器分頁顯示 "ok":true 與 Webhook was set'],
-    pit:['顯示 Unauthorized：token 貼錯','顯示 bad webhook：網址不是 https 開頭或貼錯'] },
+    pit:['顯示 Unauthorized：token 貼錯','顯示 bad webhook：網址不是 https 開頭或貼錯','之後機器人卡住沒反應：按「查看目前設定」，看 pending_update_count 和 last_error_message'] },
   { t:'開始聊天', s:'驗收！', time:'2 分鐘',
     why:'在 Telegram 找到你的機器人，傳一句話。路線都通的話，幾秒內就會收到 Gemini 的回答。',
     acts:[
@@ -683,7 +703,7 @@ var TG = [
       '<div class="bub me">幫我用三點說明什麼是失智症</div>'+
       '<div class="bub">1. 大腦功能退化，不只是健忘<br>2. 會影響記憶、判斷和生活能力<br>3. 及早就醫評估，有助延緩惡化</div>'), '示意圖：機器人在 Telegram 裡的回覆'); },
     check:['Telegram 收到 AI 的回答'],
-    pit:['同一題回兩次：請確認用的是本頁最新程式碼'] }
+    pit:['/start 有回、後面沒反應，或同一題回兩次：看頁面下方「卡住了？」的 Telegram 題目'] }
 ];
 TG[2] = S_CODE('telegram'); TG[3] = S_DEPLOY('telegram');
 
