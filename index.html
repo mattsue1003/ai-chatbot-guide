@@ -253,12 +253,21 @@ footer{font-size:.8em; color:var(--muted); text-align:center}
         <li>改過程式碼後要「管理部署作業 → 編輯 → 版本選『新版本』→ 部署」，否則網址還在跑舊的程式。</li>
         <li>LINE：確認「Use webhook」已開啟，且官方帳號的「回應設定」裡 Webhook 是開的。</li>
       </ul></details>
+    <details><summary>機器人回覆很慢</summary>
+      <ul>
+        <li>正常速度：短問題大約 2～5 秒。每次都超過 10 秒，通常是模型的關係。</li>
+        <li>最常見的原因是用了會先「思考」再回答的模型（例如 <code class="inl">gemini-3.8-flash</code>）。聊天機器人請在程式碼小工具選 <b>快速（建議）</b>，用 lite 模型。</li>
+        <li>想知道時間花在哪：在 Apps Script 的函式選單選 <code class="inl">speedTest</code> 按執行，執行記錄會列出每個模型各花幾秒，把最快的那個填到 MODEL。</li>
+        <li>隔一陣子沒用，第一則訊息會多等 1～3 秒，這是 Apps Script 在「暖機」，免費方案避不掉。</li>
+        <li>新版程式碼會在等待時顯示「輸入中」動畫，讓對方知道機器人正在回答。</li>
+        <li>改完程式碼，記得「管理部署作業 → 編輯 → 新版本 → 部署」才會生效。</li>
+      </ul></details>
     <details><summary>機器人回覆「抱歉，AI 暫時無法回覆」</summary>
       <p>這代表 LINE / Telegram 那一半已經通了，問題在 Gemini 這一端。後面接的訊息就是原因：常見是金鑰貼錯（多了空白），或短時間問太多次超過免費額度。到 Apps Script 執行 <code class="inl">testGemini</code> 就能看到詳細錯誤。</p></details>
     <details><summary>出現「This model … is no longer available」</summary>
-      <p>Google 會定期停用舊的 Gemini 模型。新版範例程式碼已經會在模型停用時，依序自動改用 <code class="inl">gemini-flash-latest</code>、<code class="inl">gemini-flash-lite-latest</code>。如果還是出現這個錯誤：到「貼上程式碼」那一步，把「Gemini 模型名稱」換成錯誤訊息裡建議的名稱，重新複製程式碼貼上、儲存，再到「管理部署作業」部署「新版本」。</p></details>
+      <p>Google 會定期停用舊的 Gemini 模型。新版範例程式碼已經會在模型停用時，自動改用程式碼裡 <code class="inl">BACKUP_MODELS</code> 列出的其他模型。如果還是出現這個錯誤：到「貼上程式碼」那一步，把「Gemini 模型名稱」換成錯誤訊息裡建議的名稱，重新複製程式碼貼上、儲存，再到「管理部署作業」部署「新版本」。</p></details>
     <details><summary>出現「This model is currently experiencing high demand」</summary>
-      <p>這是 Google 那邊太多人同時使用 Gemini，暫時忙線，不是你的設定錯了，通常過幾分鐘就會恢復。新版範例程式碼遇到忙線，會自動改用備用模型，最後一個是比較輕量、通常比較不擠的 <code class="inl">gemini-flash-lite-latest</code>。如果全部模型都忙線，機器人會回「Google 的 AI 現在太多人使用，請過一兩分鐘再問一次」。上課時全班同時測試特別容易遇到，可以請學員錯開幾秒再按執行。</p></details>
+      <p>這是 Google 那邊太多人同時使用 Gemini，暫時忙線，不是你的設定錯了，通常過幾分鐘就會恢復。新版範例程式碼遇到忙線，會自動改用備用模型。如果全部模型都忙線，機器人會回「Google 的 AI 現在太多人使用，請過一兩分鐘再問一次」。上課時全班同時測試特別容易遇到，可以請學員錯開幾秒再按執行。</p></details>
     <details><summary>LINE 按下 Verify 出現錯誤</summary>
       <p>Apps Script 的網址會先轉址一次，有時 Verify 會顯示失敗。直接用手機傳一則訊息測試；只要機器人有回覆，這個錯誤可以忽略。</p></details>
     <details><summary>Telegram 機器人同一個問題回了兩次以上</summary>
@@ -295,7 +304,8 @@ function phone(kind, title, bubbles){
 }
 
 /* ---------- state ---------- */
-var DEFAULT_MODEL = 'gemini-3.8-flash';
+var DEFAULT_MODEL = 'gemini-3.5-flash-lite';
+var MODEL_PRESETS = { '快速（建議）': 'gemini-3.5-flash-lite', '較聰明、較慢': 'gemini-3.8-flash' };
 var state = { pf: 'line', idx: 0, gemKey: '', pfToken: '', persona: '', gasUrl: '', model: DEFAULT_MODEL };
 var PERSONAS = {
   '一般小幫手': '你是一位親切的 AI 小幫手，請用繁體中文（台灣用語）回答，回答簡潔、條列重點，不超過 200 字。',
@@ -311,14 +321,15 @@ var GEMINI_PART = [
 "",
 "// ---- 問 Gemini：模型忙線或停用時，自動換下一個模型再試 ----",
 "function askGemini(text) {",
-"  var models = [MODEL].concat(BACKUP_MODELS.filter(function (m) { return m !== MODEL; }));",
-"  var data = {};",
+"  var models = allModels();",
+"  var start = Date.now(), data = {};",
 "  for (var i = 0; i < models.length; i++) {",
-"    data = callGemini(models[i], text);",
+"    var t0 = Date.now();",
+"    data = tryModel(models[i], text);",
+"    Logger.log(models[i] + (data.error ? ' 失敗（' + data.error.code + '）' : ' 回答了') + '，花了 ' + ((Date.now() - t0) / 1000).toFixed(1) + ' 秒');",
 "    if (!data.error) break;",
-"    var c = data.error.code;",
-"    if ([404, 429, 500, 502, 503].indexOf(c) < 0) break;   // 金鑰錯誤等問題，換模型也沒用",
-"    Logger.log(models[i] + ' 暫時不能用（' + c + '），改試下一個模型');",
+"    if ([404, 429, 500, 502, 503].indexOf(data.error.code) < 0) break;   // 金鑰錯誤等問題，換模型也沒用",
+"    if (Date.now() - start > 20000) break;   // 已經等超過 20 秒，不再換模型",
 "  }",
 "  try {",
 "    return data.candidates[0].content.parts.map(function (p) { return p.text || ''; }).join('');",
@@ -340,16 +351,30 @@ var GEMINI_PART = [
 "  return '抱歉，AI 暫時無法回覆：' + (tips[e.code] || '') + '（' + e.code + ' ' + e.message + '）';",
 "}",
 "",
-"function callGemini(model, text) {",
+"function allModels() {",
+"  return [MODEL].concat(BACKUP_MODELS.filter(function (m) { return m !== MODEL; }));",
+"}",
+"",
+"// 先用「少思考、快回答」的設定問；模型不接受這個設定時，改用預設設定再問一次",
+"function tryModel(model, text) {",
+"  var data = callGemini(model, text, true);",
+"  if (data.error && data.error.code === 400 && /think/i.test(data.error.message)) data = callGemini(model, text, false);",
+"  return data;",
+"}",
+"",
+"function callGemini(model, text, fast) {",
+"  var body = {",
+"    system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },",
+"    contents: [{ role: 'user', parts: [{ text: text }] }]",
+"  };",
+"  // lite 模型本來就幾乎不思考；其他模型預設會先想一陣子，調低才回得快",
+"  if (fast && model.indexOf('lite') < 0) body.generationConfig = { thinkingConfig: { thinkingLevel: 'low' } };",
 "  var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent';",
 "  var res = UrlFetchApp.fetch(url, {",
 "    method: 'post',",
 "    contentType: 'application/json',",
 "    headers: { 'x-goog-api-key': GEMINI_API_KEY },",
-"    payload: JSON.stringify({",
-"      system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },",
-"      contents: [{ role: 'user', parts: [{ text: text }] }]",
-"    }),",
+"    payload: JSON.stringify(body),",
 "    muteHttpExceptions: true",
 "  });",
 "  try {",
@@ -371,6 +396,16 @@ var GEMINI_PART = [
 "// ---- 在編輯器按「執行」測試金鑰（第一次會要求授權）----",
 "function testGemini() {",
 "  Logger.log(askGemini('請用一句話自我介紹'));",
+"}",
+"",
+"// ---- 覺得回覆慢？執行這個，看每個模型各花幾秒 ----",
+"function speedTest() {",
+"  allModels().forEach(function (m) {",
+"    var t0 = Date.now();",
+"    var data = tryModel(m, '請用一句話自我介紹');",
+"    var sec = ((Date.now() - t0) / 1000).toFixed(1);",
+"    Logger.log(m + '：' + (data.error ? '失敗（' + data.error.code + ' ' + data.error.message + '）' : sec + ' 秒'));",
+"  });",
 "}"
 ].join('\n');
 
@@ -382,7 +417,7 @@ function codeFor(pf){
 "var GEMINI_API_KEY = " + q(key) + ";",
 (pf==='line' ? "var LINE_TOKEN = " : "var TG_TOKEN = ") + q(tok) + ";",
 "var MODEL = " + q(state.model.trim() || DEFAULT_MODEL) + ";   // 模型名稱，可到 AI Studio 查最新的",
-"var BACKUP_MODELS = ['gemini-flash-latest', 'gemini-flash-lite-latest'];   // 上面的模型忙線或停用時，依序改用這些",
+"var BACKUP_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.6-flash', 'gemini-3.8-flash'];   // 上面的模型忙線或停用時，依序改用這些",
 "var SYSTEM_PROMPT = " + q(state.persona || PERSONAS['一般小幫手']) + ";",
 "// =========================",
 ""];
@@ -393,6 +428,7 @@ function codeFor(pf){
 "  (body.events || []).forEach(function (ev) {",
 "    if (ev.type !== 'message' || ev.message.type !== 'text') return;",
 "    if (isDuplicate(ev.webhookEventId)) return;",
+"    if (ev.source && ev.source.type === 'user') showLoading(ev.source.userId);",
 "    var answer = askGemini(ev.message.text);",
 "    UrlFetchApp.fetch('https://api.line.me/v2/bot/message/reply', {",
 "      method: 'post',",
@@ -406,6 +442,17 @@ function codeFor(pf){
 "    });",
 "  });",
 "  return ContentService.createTextOutput('OK');",
+"}",
+"",
+"// ---- 等 AI 回答時，在聊天室顯示「⋯」輸入中動畫（只有一對一聊天有效）----",
+"function showLoading(userId) {",
+"  UrlFetchApp.fetch('https://api.line.me/v2/bot/chat/loading/start', {",
+"    method: 'post',",
+"    contentType: 'application/json',",
+"    headers: { Authorization: 'Bearer ' + LINE_TOKEN },",
+"    payload: JSON.stringify({ chatId: userId, loadingSeconds: 30 }),",
+"    muteHttpExceptions: true",
+"  });",
 "}"
   ] : [
 "// ---- Telegram 傳訊息進來時會執行這裡 ----",
@@ -417,16 +464,21 @@ function codeFor(pf){
 "  if (msg.text === '/start') {",
 "    sendTG(msg.chat.id, '嗨！我是 AI 小幫手，直接打字問我吧。');",
 "  } else {",
+"    callTG('sendChatAction', { chat_id: msg.chat.id, action: 'typing' });   // 顯示「輸入中…」",
 "    sendTG(msg.chat.id, askGemini(msg.text));",
 "  }",
 "  return ContentService.createTextOutput('OK');",
 "}",
 "",
 "function sendTG(chatId, text) {",
-"  UrlFetchApp.fetch('https://api.telegram.org/bot' + TG_TOKEN + '/sendMessage', {",
+"  callTG('sendMessage', { chat_id: chatId, text: text.slice(0, 4000) });",
+"}",
+"",
+"function callTG(method, data) {",
+"  UrlFetchApp.fetch('https://api.telegram.org/bot' + TG_TOKEN + '/' + method, {",
 "    method: 'post',",
 "    contentType: 'application/json',",
-"    payload: JSON.stringify({ chat_id: chatId, text: text.slice(0, 4000) }),",
+"    payload: JSON.stringify(data),",
 "    muteHttpExceptions: true",
 "  });",
 "}"
@@ -684,7 +736,7 @@ function toolHTML(kind){
         '<label class="fld">'+tokLabel+'（第 '+(state.pf==='line'?4:2)+' 步）<input id="in-tok" autocomplete="off" spellcheck="false" placeholder="貼上 '+pfName+' 權杖" value="'+esc(state.pfToken)+'"></label>'+
       '</div>'+
       '<label class="fld">機器人的角色（SYSTEM_PROMPT）<div class="presets">'+chips+'</div><textarea id="in-persona">'+esc(state.persona)+'</textarea></label>'+
-      '<label class="fld">Gemini 模型名稱（通常不用改；出現「model is no longer available」時，換成錯誤訊息建議的名稱）<input id="in-model" autocomplete="off" spellcheck="false" value="'+esc(state.model)+'"></label>'+
+      '<label class="fld">Gemini 模型（聊天機器人建議用「快速」；出現「model is no longer available」時，換成錯誤訊息建議的名稱）<div class="presets">'+Object.keys(MODEL_PRESETS).map(function(k){ return '<button type="button" data-model="'+MODEL_PRESETS[k]+'">'+k+'</button>'; }).join('')+'</div><input id="in-model" autocomplete="off" spellcheck="false" value="'+esc(state.model)+'"></label>'+
       '<div class="code-wrap"><button class="copy" id="copyCode">複製程式碼</button><pre class="code" id="codeOut"></pre></div></div>';
   }
   if(kind === 'gasurl'){
@@ -704,6 +756,7 @@ function toolHTML(kind){
 function wireTool(kind){
   var tok = $('#in-tok'), gem = $('#in-gem'), per = $('#in-persona'), gas = $('#in-gas'), mdl = $('#in-model');
   if(mdl) mdl.addEventListener('input', function(){ state.model = mdl.value; refreshCode(); });
+  document.querySelectorAll('[data-model]').forEach(function(b){ b.addEventListener('click', function(){ state.model = b.dataset.model; mdl.value = state.model; refreshCode(); }); });
   function refreshCode(){ var o = $('#codeOut'); if(o) o.innerHTML = highlight(codeFor(state.pf)); }
   function checkTok(){
     var m = $('#tokMsg'); if(!m) return; var v = state.pfToken.trim();
