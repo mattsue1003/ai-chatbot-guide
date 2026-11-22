@@ -264,6 +264,13 @@ footer{font-size:.8em; color:var(--muted); text-align:center}
         <li>Telegram 版還會「邊寫邊顯示」：AI 寫出前幾個字就先送出，再持續更新同一則訊息。LINE 不能修改已送出的訊息，所以只會省掉啟動時間。</li>
         <li>已經用 Apps Script 做好的機器人要搬過去：Gemini 金鑰和平台權杖都不用重新申請，只要做「建立 Worker」「貼程式碼」，再把 Webhook 網址換成 Worker 的網址。</li>
       </ul></details>
+    <details><summary>Workers 版：傳訊息沒反應</summary>
+      <ul>
+        <li>用瀏覽器打開「你的 Worker 網址<code class="inl">?test=1</code>」，它會一次檢查四件事，哪一行是 ✗ 就修哪一行：Gemini 金鑰、平台權杖、平台上登記的 Webhook 網址是不是這個 Worker、（LINE）Use webhook 開關。</li>
+        <li>最常見：LINE Developers 的 Webhook URL 還是舊的 Apps Script 網址，或填成 Telegram 那個 Worker 的網址。LINE 和 Telegram 要各建一個 Worker。</li>
+        <li>第二常見：複製程式碼時 LINE 權杖那一格是空的，程式碼裡還是「在這裡貼上…」的中文提示。回到小工具填好兩把鑰匙，重新複製、貼上、按 Deploy。</li>
+        <li>四行都是 ✓ 還是沒反應：在 Cloudflare 的 Worker 頁面開 <b>Logs</b>（記錄），傳一則訊息，看有沒有出現「LINE message/reply 失敗」之類的訊息。</li>
+      </ul></details>
     <details><summary>機器人回覆很慢</summary>
       <ul>
         <li>正常速度：短問題大約 2～5 秒。每次都超過 10 秒，通常是模型的關係。</li>
@@ -320,13 +327,15 @@ const SYSTEM_PROMPT = __PERSONA__;
 export default {
   async fetch(request, env, ctx) {
     if (request.method !== 'POST') {
-      // 用瀏覽器打開「你的網址?test=1」可以測試 Gemini 金鑰
-      if (new URL(request.url).searchParams.get('test') === '1') {
+      // 用瀏覽器打開「你的網址?test=1」可以一次檢查：Gemini 金鑰、平台權杖、Webhook 設定
+      const url = new URL(request.url);
+      if (url.searchParams.get('test') === '1') {
         const t0 = Date.now();
         const answer = await askGemini('請用一句話自我介紹');
-        return page('AI 回答：' + answer + '\n\n花了 ' + ((Date.now() - t0) / 1000).toFixed(1) + ' 秒');
+        const sec = ((Date.now() - t0) / 1000).toFixed(1);
+        return page('AI 回答：' + answer + '\n花了 ' + sec + ' 秒\n\n' + (await checkPlatform(url.origin)));
       }
-      return page('中繼站運作中。在網址最後面加上 ?test=1 可以測試 Gemini 金鑰。');
+      return page('中繼站運作中。在網址最後面加上 ?test=1 可以檢查金鑰、權杖和 Webhook 設定。');
     }
     let body = {};
     try { body = (await request.json()) || {}; } catch (err) {}
@@ -386,6 +395,17 @@ async function callTG(method, data) {
     return {};
   }
 }
+
+// ---- ?test=1 時檢查 Telegram 這一邊的設定 ----
+async function checkPlatform(myUrl) {
+  const me = await callTG('getMe', {});
+  if (!me.ok) return 'Telegram token：✗ 不能用，請確認 TG_TOKEN 是 BotFather 給的那一串。';
+  const wh = (await callTG('getWebhookInfo', {})).result || {};
+  const set = (wh.url || '').replace(/\/$/, '');
+  return ['Telegram token：✓ 可以用，機器人帳號是 @' + me.result.username,
+    'Telegram 的 Webhook 網址：' + (set || '還沒設定') + (set === myUrl ? ' ✓' : ' ✗ 應該要是 ' + myUrl + '，請回教學網頁按「開啟設定網址」'),
+    '排隊中的訊息：' + (wh.pending_update_count || 0) + ' 則' + (wh.last_error_message ? '；最近的錯誤：' + wh.last_error_message : '')].join('\n');
+}
 </script>
 <script type="text/plain" id="tpl-cf-line">
 
@@ -403,19 +423,40 @@ async function handle(body) {
     }
     await callLINE('message/reply', {
       replyToken: ev.replyToken,
-      messages: [{ type: 'text', text: answer.slice(0, 4900) }]
+      messages: [{ type: 'text', text: answer.replace(/\*\*/g, '').slice(0, 4900) }]   // LINE 不會顯示粗體，把 ** 拿掉
     });
   }
 }
 
 async function callLINE(path, data) {
   try {
-    await fetch('https://api.line.me/v2/bot/' + path, {
+    const res = await fetch('https://api.line.me/v2/bot/' + path, {
       method: 'POST',
       headers: { 'content-type': 'application/json', Authorization: 'Bearer ' + LINE_TOKEN },
       body: JSON.stringify(data)
     });
-  } catch (err) {}
+    if (!res.ok) console.log('LINE ' + path + ' 失敗（' + res.status + '）：' + (await res.text()));
+  } catch (err) {
+    console.log('LINE ' + path + ' 出錯：' + err.message);
+  }
+}
+
+// ---- ?test=1 時檢查 LINE 這一邊的設定 ----
+async function checkPlatform(myUrl) {
+  const out = [];
+  try {
+    const headers = { Authorization: 'Bearer ' + LINE_TOKEN };
+    const info = await fetch('https://api.line.me/v2/bot/info', { headers: headers });
+    if (!info.ok) return 'LINE 權杖：✗ 不能用（' + info.status + '）。LINE_TOKEN 要貼 Messaging API 分頁最下面的 Channel access token (long-lived)，不是 Channel secret。';
+    out.push('LINE 權杖：✓ 可以用，機器人名稱是「' + (await info.json()).displayName + '」');
+    const wh = await (await fetch('https://api.line.me/v2/bot/channel/webhook/endpoint', { headers: headers })).json();
+    const set = (wh.endpoint || '').replace(/\/$/, '');
+    out.push('LINE 的 Webhook 網址：' + (set || '還沒填') + (set === myUrl ? ' ✓' : ' ✗ 應該要填 ' + myUrl));
+    out.push('Use webhook 開關：' + (wh.active ? '✓ 已開啟' : '✗ 沒有開，請到 LINE Developers 的 Messaging API 分頁打開'));
+  } catch (err) {
+    return 'LINE 權杖：✗ 還沒貼上，或裡面混到中文、空白、換行（' + err.message + '）';
+  }
+  return out.join('\n');
 }
 </script>
 <script type="text/plain" id="tpl-cf-gem">
@@ -670,7 +711,7 @@ function codeFor(pf){
 "      headers: { Authorization: 'Bearer ' + LINE_TOKEN },",
 "      payload: JSON.stringify({",
 "        replyToken: ev.replyToken,",
-"        messages: [{ type: 'text', text: answer.slice(0, 4900) }]",
+"        messages: [{ type: 'text', text: answer.replace(/\\*\\*/g, '').slice(0, 4900) }]   // LINE 不會顯示粗體，把 ** 拿掉",
 "      }),",
 "      muteHttpExceptions: true",
 "    });",
@@ -818,14 +859,14 @@ function S_CF_CODE(pf){ return {
     '在下方小工具填入兩把鑰匙、選好機器人角色，按 <span class="ui">複製程式碼</span>。',
     '回到編輯器，把 <code class="inl">worker.js</code> 原本的內容全部刪掉，貼上程式碼，按右上角 <span class="ui">Deploy</span>。',
     '按下方小工具的 <span class="ui">開啟測試網址</span>（就是你的 Worker 網址後面加上 <code class="inl">?test=1</code>）。',
-    '新分頁出現「AI 回答：…」和花了幾秒，代表 Gemini 金鑰可以用了。'
+    '新分頁出現「AI 回答：…」和花了幾秒，代表 Gemini 金鑰可以用了。下面幾行是 '+(pf==='line'?'LINE':'Telegram')+' 的檢查：權杖那一行要是 ✓；Webhook 那幾行現在是 ✗ 很正常，做完後面的步驟再回來看。'
   ],
   mock: function(){ return fig(win('dash.cloudflare.com/…/my-ai-bot/production',
     '<div class="m-row"><span class="m-title">my-ai-bot</span><span style="flex:1"></span><span class="m-btn hot">'+pin(1)+' &lt;/&gt; Edit code</span><span class="m-btn pri hot">'+pin(3)+' Deploy</span></div>'+
     '<div class="m-code"><span style="color:var(--code-com)">// ===== 只要改這一區 =====</span>\nconst GEMINI_API_KEY = \'AQ.…\';\nconst '+(pf==='line'?'LINE_TOKEN':'TG_TOKEN')+' = \'…\';\n\nexport default { async fetch(request, env, ctx) { … } };</div>'+
     '<div class="m-dialog hot" style="box-shadow:none"><div class="m-muted">'+pin(5)+' my-ai-bot.xiaoming.workers.dev/?test=1</div><div style="font-size:12px">AI 回答：您好！我是你的 AI 小幫手。<br>花了 1.2 秒</div></div>')); },
-  check:['打開 ?test=1 的網址，看到一句 AI 寫的自我介紹和花費的秒數'],
-  pit:['改過程式碼後，一定要再按一次 Deploy 才會生效','看到「抱歉，AI 暫時無法回覆…」：金鑰貼錯或多了空白','金鑰直接寫在程式碼裡，不要把編輯器畫面截圖分享到群組']
+  check:['打開 ?test=1 的網址，看到一句 AI 寫的自我介紹和花費的秒數','同一頁的權杖檢查顯示 ✓'],
+  pit:['改過程式碼後，一定要再按一次 Deploy 才會生效','LINE 和 Telegram 要各用一個 Worker，程式碼不一樣，不能共用同一個網址','看到「抱歉，AI 暫時無法回覆…」：金鑰貼錯或多了空白','金鑰直接寫在程式碼裡，不要把編輯器畫面截圖分享到群組']
 };}
 
 /* ---------- LINE steps ---------- */
