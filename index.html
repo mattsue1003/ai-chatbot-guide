@@ -272,6 +272,14 @@ footer{font-size:.8em; color:var(--muted); text-align:center}
         <li>第二常見：複製程式碼時 LINE 權杖那一格是空的，程式碼裡還是「在這裡貼上…」的中文提示。回到小工具填好兩把鑰匙，重新複製、貼上、按 Deploy。</li>
         <li>四行都是 ✓ 還是沒反應：在 Cloudflare 的 Worker 頁面開 <b>Logs</b>（記錄），傳一則訊息，看有沒有出現「LINE message/reply 失敗」之類的訊息。</li>
       </ul></details>
+    <details><summary>出現「402 Your prepayment credits are depleted」</summary>
+      <ul>
+        <li>意思是：這把 Gemini 金鑰所屬的專案開了付費（預付制），但儲值金是 0。這時連到同一個帳單帳戶的所有金鑰都會一起停用，Google 不會自動幫你改回免費方案。</li>
+        <li>想繼續免費使用：到 <a href="https://aistudio.google.com/projects" target="_blank" rel="noopener">AI Studio 的 Projects 頁</a>建立一個新專案，確認它的 Billing Tier 欄顯示 <b>Set up billing</b>（代表沒有綁帳單，<b>不要</b>點進去設定付費），再到 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">API 金鑰頁</a>按 <span class="ui">Create API key</span>、選這個新專案。</li>
+        <li>把新金鑰換到程式碼的 <code class="inl">GEMINI_API_KEY</code>，Apps Script 要「部署新版本」，Workers 要再按一次 Deploy。</li>
+        <li>想付費使用：到 <a href="https://aistudio.google.com/billing" target="_blank" rel="noopener">AI Studio 的 Billing 頁</a>按 Buy credits 儲值（最低 5 美元，12 個月後過期、不能退款）。</li>
+        <li>預防：申請金鑰時，畫面如果請你「Set up billing」或填信用卡，請直接略過，免費方案不需要。</li>
+      </ul></details>
     <details><summary>機器人回覆很慢</summary>
       <ul>
         <li>正常速度：短問題大約 2～5 秒。每次都超過 10 秒，通常是模型的關係。</li>
@@ -486,6 +494,7 @@ function explainError(e) {
   if (!e) return '抱歉，AI 這次沒有給出答案，請換個說法再問一次。';
   const tips = {
     400: '金鑰好像不對，請確認 GEMINI_API_KEY 有完整貼上、沒有多餘空白。',
+    402: '這把金鑰的專案開了付費（預付制），但儲值金用完了。請到 AI Studio 建立一個沒有綁帳單的新專案、換一把新金鑰，或是去儲值。',
     403: '這把金鑰沒有權限，請到 AI Studio 重新建立一把金鑰。',
     404: '模型名稱已停用，請把 MODEL 換成錯誤訊息建議的名稱。',
     429: '今天的免費額度用完了，或問得太快，請等一下再試。',
@@ -605,6 +614,7 @@ var GEMINI_PART = [
 "  if (!e) return '抱歉，AI 這次沒有給出答案，請換個說法再問一次。';",
 "  var tips = {",
 "    400: '金鑰好像不對，請確認 GEMINI_API_KEY 有完整貼上、沒有多餘空白。',",
+"    402: '這把金鑰的專案開了付費（預付制），但儲值金用完了。請到 AI Studio 建立一個沒有綁帳單的新專案、換一把新金鑰，或是去儲值。',",
 "    403: '這把金鑰沒有權限，請到 AI Studio 重新建立一把金鑰。',",
 "    404: '模型名稱已停用，請把 MODEL 換成錯誤訊息建議的名稱。',",
 "    429: '今天的免費額度用完了，或問得太快，請等一下再試。',",
@@ -791,7 +801,7 @@ var S_GEMINI = {
     '<div class="m-muted">Gemini API 免費方案適合學習與測試</div>'+
     '<div class="m-dialog"><div class="m-title" style="font-size:13px">已產生 API 金鑰</div><div class="m-row"><span class="m-field">AQ.Ab8•••••••••••••••••••Q7k</span><span class="m-btn hot">'+pin(4)+' 複製</span></div></div>')); },
   check:['記事本裡有一長串金鑰，開頭是 AQ. 或 AIza'],
-  pit:['金鑰等同密碼，不要截圖分享到群組','複製時不要多帶到空白或換行']
+  pit:['金鑰等同密碼，不要截圖分享到群組','複製時不要多帶到空白或換行','畫面請你 Set up billing 或填信用卡時請略過。開了付費又沒儲值，金鑰會被停用（錯誤 402）']
 };
 function S_CODE(pf){ return {
   t:'把程式碼貼進 Apps Script', s:'做出中繼站', time:'8 分鐘', tool:'code',
