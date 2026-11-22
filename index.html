@@ -211,7 +211,7 @@ footer{font-size:.8em; color:var(--muted); text-align:center}
 <div class="wrap">
   <header class="top">
     <div class="brand">
-      <small>Gemini × Apps Script × LINE / Telegram</small>
+      <small>Gemini × Apps Script / Cloudflare Workers × LINE / Telegram</small>
       <h1>AI 機器人串接教室</h1>
       <p>不用架伺服器、不用信用卡。跟著步驟做，約 40 分鐘就能在手機上和自己的 AI 機器人聊天。</p>
     </div>
@@ -219,6 +219,10 @@ footer{font-size:.8em; color:var(--muted); text-align:center}
       <div class="seg" role="group" aria-label="選擇平台">
         <button id="pf-line" data-pf="line"><span class="dot" style="background:#06C755"></span>LINE</button>
         <button id="pf-telegram" data-pf="telegram"><span class="dot" style="background:#2AABEE"></span>Telegram</button>
+      </div>
+      <div class="seg" role="group" aria-label="選擇中繼站">
+        <button id="relay-gas" data-relay="gas" title="Google Apps Script：只需要 Google 帳號，最簡單">Apps Script（簡單）</button>
+        <button id="relay-cf" data-relay="cf" title="Cloudflare Workers：要多註冊一個免費帳號，回覆比較快">Workers（較快）</button>
       </div>
       <button class="ghost" id="bigBtn" aria-pressed="false">投影模式（大字）</button>
     </div>
@@ -230,7 +234,7 @@ footer{font-size:.8em; color:var(--muted); text-align:center}
     <p class="flow-note">我們要做的事就是：準備兩把「鑰匙」（AI 金鑰、聊天平台權杖），寫好中繼站，再把中繼站網址告訴聊天平台。</p>
   </section>
 
-  <div class="prep"><b>開始前準備：</b><span class="chip">一個 Google 帳號</span><span class="chip" id="prepPf">LINE 帳號（手機）</span><span class="chip">電腦＋Chrome 瀏覽器</span><span class="chip">約 40 分鐘</span></div>
+  <div class="prep"><b>開始前準備：</b><span class="chip">一個 Google 帳號</span><span class="chip" id="prepRelay" hidden>Cloudflare 帳號（免費，用 email 註冊）</span><span class="chip" id="prepPf">LINE 帳號（手機）</span><span class="chip">電腦＋Chrome 瀏覽器</span><span class="chip">約 40 分鐘</span></div>
 
   <div class="main">
     <aside class="side" aria-label="步驟清單">
@@ -252,6 +256,13 @@ footer{font-size:.8em; color:var(--muted); text-align:center}
         <li>網址要用結尾是 <code class="inl">/exec</code> 的那一個，不是 <code class="inl">/dev</code>。</li>
         <li>改過程式碼後要「管理部署作業 → 編輯 → 版本選『新版本』→ 部署」，否則網址還在跑舊的程式。</li>
         <li>LINE：確認「Use webhook」已開啟，且官方帳號的「回應設定」裡 Webhook 是開的。</li>
+      </ul></details>
+    <details><summary>想要回覆更快：把中繼站換成 Cloudflare Workers</summary>
+      <ul>
+        <li>Apps Script 每則訊息都要先啟動，大約多等 1～3 秒，而且模型忙線時沒辦法設定「等太久就換一個」。這是平台本身的限制，改程式碼省不了多少。</li>
+        <li>頁面上方把中繼站切到 <b>Workers（較快）</b>，步驟會換成 Cloudflare Workers 版：啟動幾乎不用等、模型 8 秒沒回應就自動換下一個。</li>
+        <li>Telegram 版還會「邊寫邊顯示」：AI 寫出前幾個字就先送出，再持續更新同一則訊息。LINE 不能修改已送出的訊息，所以只會省掉啟動時間。</li>
+        <li>已經用 Apps Script 做好的機器人要搬過去：Gemini 金鑰和平台權杖都不用重新申請，只要做「建立 Worker」「貼程式碼」，再把 Webhook 網址換成 Worker 的網址。</li>
       </ul></details>
     <details><summary>機器人回覆很慢</summary>
       <ul>
@@ -297,6 +308,204 @@ footer{font-size:.8em; color:var(--muted); text-align:center}
   <footer>示意畫面為簡化繪製，實際按鈕位置可能因網站改版略有不同。本頁不會儲存你輸入的金鑰。</footer>
 </div>
 
+<script type="text/plain" id="tpl-cf-head">
+// ===== 只要改這一區 =====
+const GEMINI_API_KEY = __KEY__;
+const __TOKNAME__ = __TOK__;
+const MODEL = __MODEL__;   // 模型名稱，可到 AI Studio 查最新的
+const BACKUP_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.6-flash', 'gemini-3.8-flash'];   // 上面的模型忙線或停用時，依序改用這些
+const SYSTEM_PROMPT = __PERSONA__;
+// =========================
+
+export default {
+  async fetch(request, env, ctx) {
+    if (request.method !== 'POST') {
+      // 用瀏覽器打開「你的網址?test=1」可以測試 Gemini 金鑰
+      if (new URL(request.url).searchParams.get('test') === '1') {
+        const t0 = Date.now();
+        const answer = await askGemini('請用一句話自我介紹');
+        return page('AI 回答：' + answer + '\n\n花了 ' + ((Date.now() - t0) / 1000).toFixed(1) + ' 秒');
+      }
+      return page('中繼站運作中。在網址最後面加上 ?test=1 可以測試 Gemini 金鑰。');
+    }
+    let body = {};
+    try { body = (await request.json()) || {}; } catch (err) {}
+    ctx.waitUntil(handle(body));   // 先馬上回「收到了」，再在背景問 AI、送出回覆
+    return new Response('OK');
+  }
+};
+
+function page(text) {
+  return new Response(text, { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+}
+</script>
+<script type="text/plain" id="tpl-cf-tg">
+
+// ---- Telegram 傳訊息進來時會執行這裡 ----
+async function handle(update) {
+  const msg = update.message;
+  if (!msg || !msg.text) return;
+  const chat = msg.chat.id;
+  try {
+    if (msg.text === '/start') {
+      await callTG('sendMessage', { chat_id: chat, text: '嗨！我是 AI 小幫手，直接打字問我吧。' });
+      return;
+    }
+    callTG('sendChatAction', { chat_id: chat, action: 'typing' });   // 顯示「輸入中…」
+    // AI 一邊寫，這裡一邊更新同一則訊息，大約每秒更新一次
+    let msgId = 0, shown = '', last = 0;
+    const show = async function (text, isFinal) {
+      text = text.slice(0, 4000);
+      if (!text || text === shown) return;
+      if (!isFinal && Date.now() - last < 1000) return;
+      last = Date.now();
+      shown = text;
+      if (!msgId) {
+        const r = await callTG('sendMessage', { chat_id: chat, text: text });
+        msgId = r.result ? r.result.message_id : 0;
+      } else {
+        await callTG('editMessageText', { chat_id: chat, message_id: msgId, text: text });
+      }
+    };
+    const answer = await askGemini(msg.text, function (soFar) { return show(soFar + ' ▌', false); });
+    await show(answer, true);
+  } catch (err) {
+    await callTG('sendMessage', { chat_id: chat, text: '程式出錯了：' + err.message });   // 出錯時也回一句，不要沒反應
+  }
+}
+
+async function callTG(method, data) {
+  try {
+    const res = await fetch('https://api.telegram.org/bot' + TG_TOKEN + '/' + method, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return await res.json();
+  } catch (err) {
+    return {};
+  }
+}
+</script>
+<script type="text/plain" id="tpl-cf-line">
+
+// ---- LINE 傳訊息進來時會執行這裡 ----
+async function handle(body) {
+  for (const ev of body.events || []) {
+    if (ev.type !== 'message' || ev.message.type !== 'text') continue;
+    // 等 AI 回答時顯示「⋯」輸入中動畫（只有一對一聊天有效）
+    if (ev.source && ev.source.type === 'user') callLINE('chat/loading/start', { chatId: ev.source.userId, loadingSeconds: 30 });
+    let answer;
+    try {
+      answer = await askGemini(ev.message.text);
+    } catch (err) {
+      answer = '程式出錯了：' + err.message;   // 出錯時也回一句，不要沒反應
+    }
+    await callLINE('message/reply', {
+      replyToken: ev.replyToken,
+      messages: [{ type: 'text', text: answer.slice(0, 4900) }]
+    });
+  }
+}
+
+async function callLINE(path, data) {
+  try {
+    await fetch('https://api.line.me/v2/bot/' + path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Authorization: 'Bearer ' + LINE_TOKEN },
+      body: JSON.stringify(data)
+    });
+  } catch (err) {}
+}
+</script>
+<script type="text/plain" id="tpl-cf-gem">
+
+// ---- 問 Gemini：模型忙線、停用或太久沒回應時，自動換下一個模型再試 ----
+async function askGemini(text, onChunk) {
+  const models = [MODEL].concat(BACKUP_MODELS.filter(function (m) { return m !== MODEL; }));
+  const start = Date.now();
+  let error = null;
+  for (const model of models) {
+    const t0 = Date.now();
+    let r = await callGemini(model, text, true, onChunk);
+    // 模型不接受「少思考」的設定時，改用預設設定再問一次
+    if (r.error && r.error.code === 400 && /think/i.test(r.error.message)) r = await callGemini(model, text, false, onChunk);
+    console.log(model + (r.error ? ' 失敗（' + r.error.code + '）' : ' 回答了') + '，花了 ' + ((Date.now() - t0) / 1000).toFixed(1) + ' 秒');
+    if (r.text) return r.text;
+    error = r.error || null;
+    if (error && [404, 429, 500, 502, 503, 504].indexOf(error.code) < 0) break;   // 金鑰錯誤等問題，換模型也沒用
+    if (Date.now() - start > 15000) break;   // 已經等超過 15 秒，不再換模型
+  }
+  return explainError(error);
+}
+
+// ---- 把 Gemini 的英文錯誤翻成看得懂的話 ----
+function explainError(e) {
+  if (!e) return '抱歉，AI 這次沒有給出答案，請換個說法再問一次。';
+  const tips = {
+    400: '金鑰好像不對，請確認 GEMINI_API_KEY 有完整貼上、沒有多餘空白。',
+    403: '這把金鑰沒有權限，請到 AI Studio 重新建立一把金鑰。',
+    404: '模型名稱已停用，請把 MODEL 換成錯誤訊息建議的名稱。',
+    429: '今天的免費額度用完了，或問得太快，請等一下再試。',
+    503: 'Google 的 AI 現在太多人使用，請過一兩分鐘再問一次。',
+    504: 'Google 的 AI 太久沒有回應，請過一兩分鐘再問一次。'
+  };
+  return '抱歉，AI 暫時無法回覆：' + (tips[e.code] || '') + '（' + e.code + ' ' + e.message + '）';
+}
+
+// 用「串流」的方式問：AI 寫出一段就收到一段。8 秒內沒有開始回答就放棄，換下一個模型
+async function callGemini(model, text, fast, onChunk) {
+  const body = {
+    system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+    contents: [{ role: 'user', parts: [{ text: text }] }]
+  };
+  // lite 模型本來就幾乎不思考；其他模型預設會先想一陣子，調低才回得快
+  if (fast && model.indexOf('lite') < 0) body.generationConfig = { thinkingConfig: { thinkingLevel: 'low' } };
+  const ctrl = new AbortController();
+  const timer = setTimeout(function () { ctrl.abort(); }, 8000);
+  try {
+    const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':streamGenerateContent?alt=sse', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
+      body: JSON.stringify(body),
+      signal: ctrl.signal
+    });
+    if (!res.ok) {
+      let e = {};
+      try { e = await res.json(); } catch (err) {}
+      if (Array.isArray(e)) e = e[0] || {};
+      return { error: { code: res.status, message: (e.error && e.error.message) || 'Gemini 沒有回傳正確的資料' } };
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '', answer = '';
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (line.indexOf('data:') !== 0) continue;
+        try {
+          const parts = JSON.parse(line.slice(5)).candidates[0].content.parts;
+          for (const p of parts) if (p.text && !p.thought) answer += p.text;
+        } catch (err) {}
+      }
+      if (answer) {
+        clearTimeout(timer);   // 已經開始回答了，不再計時
+        if (onChunk) await onChunk(answer);
+      }
+    }
+    return { text: answer.trim() };
+  } catch (err) {
+    if (ctrl.signal.aborted) return { error: { code: 504, message: '等了 8 秒沒有回應' } };
+    return { error: { code: 500, message: err.message } };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+</script>
 <script>
 (function(){
 'use strict';
@@ -315,7 +524,9 @@ function phone(kind, title, bubbles){
 /* ---------- state ---------- */
 var DEFAULT_MODEL = 'gemini-3.5-flash-lite';
 var MODEL_PRESETS = { '快速（建議）': 'gemini-3.5-flash-lite', '較聰明、較慢': 'gemini-3.8-flash' };
-var state = { pf: 'line', idx: 0, gemKey: '', pfToken: '', persona: '', gasUrl: '', model: DEFAULT_MODEL };
+var state = { pf: 'line', idx: 0, gemKey: '', pfToken: '', persona: '', gasUrl: '', model: DEFAULT_MODEL, relay: 'gas' };
+function isCF(){ return state.relay === 'cf'; }
+function rl(gas, cf){ return isCF() ? cf : gas; }
 var PERSONAS = {
   '一般小幫手': '你是一位親切的 AI 小幫手，請用繁體中文（台灣用語）回答，回答簡潔、條列重點，不超過 200 字。',
   '衛教小幫手': '你是醫療團隊的衛教小幫手，用長輩聽得懂的繁體中文回答健康問題，句子短、多舉生活例子。遇到疑似急症或需要診斷的問題，提醒對方盡快就醫或詢問醫師，不要自行下診斷。',
@@ -418,9 +629,17 @@ var GEMINI_PART = [
 "}"
 ].join('\n');
 
+function tpl(id){ return document.getElementById('tpl-cf-' + id).textContent.replace(/^\n/, ''); }
+function cfCode(pf, key, tok){
+  var head = tpl('head').replace('__KEY__', function(){ return q(key); }).replace('__TOKNAME__', pf==='line' ? 'LINE_TOKEN' : 'TG_TOKEN')
+    .replace('__TOK__', function(){ return q(tok); }).replace('__MODEL__', function(){ return q(state.model.trim() || DEFAULT_MODEL); })
+    .replace('__PERSONA__', function(){ return q(state.persona || PERSONAS['一般小幫手']); });
+  return head + '\n' + tpl(pf==='line' ? 'line' : 'tg') + '\n' + tpl('gem');
+}
 function codeFor(pf){
   var key = state.gemKey.trim() || '在這裡貼上 Gemini API 金鑰';
   var tok = state.pfToken.trim() || (pf==='line' ? '在這裡貼上 LINE Channel access token' : '在這裡貼上 BotFather 給的 token');
+  if(isCF()) return cfCode(pf, key, tok);
   var head = [
 "// ===== 只要改這一區 =====",
 "var GEMINI_API_KEY = " + q(key) + ";",
@@ -510,7 +729,7 @@ function highlight(src){
     var ci = line.indexOf('//');
     var codePart = ci >= 0 ? line.slice(0, ci) : line, com = ci >= 0 ? line.slice(ci) : '';
     var h = esc(codePart).replace(/(&#39;|')((?:[^'\\]|\\.)*)'/g, '<span class="s">\'$2\'</span>')
-      .replace(/\b(var|function|return|if|else|try|catch)\b/g, '<span class="k">$1</span>');
+      .replace(/\b(var|const|let|function|async|await|return|if|else|for|while|try|catch|finally|export|default)\b/g, '<span class="k">$1</span>');
     return h + (com ? '<span class="c">'+esc(com)+'</span>' : '');
   }).join('\n');
 }
@@ -571,8 +790,46 @@ function S_DEPLOY(pf){ return {
   pit:['存取權選成「擁有 Google 帳戶的使用者」，平台會被擋在門外','之後改程式碼：部署 → 管理部署作業 → ✏️ 編輯 → 版本選「新版本」→ 部署。網址不變，但不做這步就還是舊程式']
 };}
 
+function S_CF_CREATE(pf){ return {
+  t:'建立 Cloudflare Worker', s:'做出中繼站、拿到網址', time:'6 分鐘', tool:'gasurl',
+  why:'Cloudflare Workers 是放在雲端的小程式空間，免費方案每天可以處理 10 萬次請求。它啟動幾乎不用等，所以機器人回得比較快。這一步先建立一個空的 Worker，拿到它的網址。',
+  acts:[
+    '開啟 Cloudflare，用 email 註冊免費帳號（已有帳號就直接登入），並到信箱點驗證信。<br><a class="link-out" href="https://dash.cloudflare.com/sign-up" target="_blank" rel="noopener">開啟 Cloudflare 註冊頁 ↗</a>',
+    '左側選單點 <span class="ui">Workers &amp; Pages</span>，按 <span class="ui">Create application</span>（建立應用程式）。',
+    '選 <span class="ui">Start with Hello World!</span>（從 Hello World 開始）。',
+    '把 Worker 名稱改成好認的英文，例如 <code class="inl">my-ai-bot</code>，按 <span class="ui">Deploy</span>（部署）。',
+    '部署完成後，畫面會顯示 <code class="inl">https://my-ai-bot.你的名稱.workers.dev</code> 這樣的網址，複製貼到下方小工具。'
+  ],
+  mock: function(){ return fig(win('dash.cloudflare.com/…/workers-and-pages',
+    '<div class="m-side"><div class="m-nav"><span>Account home</span><span class="on hot">'+pin(2)+' Workers &amp; Pages</span><span>Storage</span></div>'+
+    '<div class="m-main"><div class="m-row" style="justify-content:space-between"><span class="m-title">Workers &amp; Pages</span><span class="m-btn pri hot">'+pin(2)+' Create application</span></div>'+
+    '<div class="m-dialog" style="box-shadow:none"><span class="m-btn lg hot">'+pin(3)+' Start with Hello World!</span>'+
+    '<div class="m-kv"><span class="m-muted">Worker name</span><span class="m-field hot">'+pin(4)+' my-ai-bot</span></div>'+
+    '<div class="m-row" style="justify-content:flex-end"><span class="m-btn pri">Deploy</span></div></div>'+
+    '<div class="m-row"><span class="m-field">https://my-ai-bot.xiaoming.workers.dev</span><span class="m-btn hot">'+pin(5)+' 複製</span></div></div></div>')); },
+  check:['手上有一個 https://…workers.dev 的網址','用瀏覽器打開這個網址，會看到 Hello World!'],
+  pit:['第一次建立時會請你取一個「子網域」名稱（workers.dev 前面那一段），之後不好改，先想好再填','Cloudflare 的畫面常改版，按鈕名稱或位置可能和圖上略有不同，找意思相近的就可以','免費方案不需要填信用卡；如果畫面要求付款資料，代表選到付費方案了，請退回上一頁']
+};}
+function S_CF_CODE(pf){ return {
+  t:'把程式碼貼進 Worker', s:'讓中繼站會問 AI', time:'6 分鐘', tool:'code',
+  why:'現在的 Worker 只會回 Hello World。把它的程式碼換成我們的機器人程式：收到 '+(pf==='line'?'LINE':'Telegram')+' 的訊息 → 問 Gemini → 把答案送回去。',
+  acts:[
+    '在 Worker 的頁面按右上角 <span class="ui">Edit code</span>（編輯程式碼，圖示是 &lt;/&gt;）。',
+    '在下方小工具填入兩把鑰匙、選好機器人角色，按 <span class="ui">複製程式碼</span>。',
+    '回到編輯器，把 <code class="inl">worker.js</code> 原本的內容全部刪掉，貼上程式碼，按右上角 <span class="ui">Deploy</span>。',
+    '按下方小工具的 <span class="ui">開啟測試網址</span>（就是你的 Worker 網址後面加上 <code class="inl">?test=1</code>）。',
+    '新分頁出現「AI 回答：…」和花了幾秒，代表 Gemini 金鑰可以用了。'
+  ],
+  mock: function(){ return fig(win('dash.cloudflare.com/…/my-ai-bot/production',
+    '<div class="m-row"><span class="m-title">my-ai-bot</span><span style="flex:1"></span><span class="m-btn hot">'+pin(1)+' &lt;/&gt; Edit code</span><span class="m-btn pri hot">'+pin(3)+' Deploy</span></div>'+
+    '<div class="m-code"><span style="color:var(--code-com)">// ===== 只要改這一區 =====</span>\nconst GEMINI_API_KEY = \'AIza…\';\nconst '+(pf==='line'?'LINE_TOKEN':'TG_TOKEN')+' = \'…\';\n\nexport default { async fetch(request, env, ctx) { … } };</div>'+
+    '<div class="m-dialog hot" style="box-shadow:none"><div class="m-muted">'+pin(5)+' my-ai-bot.xiaoming.workers.dev/?test=1</div><div style="font-size:12px">AI 回答：您好！我是你的 AI 小幫手。<br>花了 1.2 秒</div></div>')); },
+  check:['打開 ?test=1 的網址，看到一句 AI 寫的自我介紹和花費的秒數'],
+  pit:['改過程式碼後，一定要再按一次 Deploy 才會生效','看到「抱歉，AI 暫時無法回覆…」：金鑰貼錯或多了空白','金鑰直接寫在程式碼裡，不要把編輯器畫面截圖分享到群組']
+};}
+
 /* ---------- LINE steps ---------- */
-var LINE = [
+function buildLINE(){ var LINE = [
   S_GEMINI,
   { t:'建立 LINE 官方帳號', s:'機器人的 LINE 身分', time:'5 分鐘',
     why:'LINE 機器人其實就是一個「LINE 官方帳號」。免費方案就夠用，而且機器人「回覆」訊息不會扣免費則數。',
@@ -627,14 +884,14 @@ var LINE = [
     why:'Webhook 就是「有人傳訊息時，LINE 要通知的網址」。填上中繼站網址，訊息才會流進你的程式。',
     acts:[
       '回到 LINE Developers → 你的 Channel → <span class="ui">Messaging API</span> 分頁。',
-      '找到 <b>Webhook settings</b> → Webhook URL 旁按 <span class="ui">Edit</span>，貼上 <code class="inl">/exec</code> 網址 → <span class="ui">Update</span>。',
+      '找到 <b>Webhook settings</b> → Webhook URL 旁按 <span class="ui">Edit</span>，貼上 '+rl('<code class="inl">/exec</code> 網址','Worker 的 <code class="inl">workers.dev</code> 網址')+' → <span class="ui">Update</span>。',
       '把 <b>Use webhook</b> 開關打開（變綠色）。',
       '同一頁往下，<b>Auto-reply messages</b> 旁按 <span class="ui">Edit</span>，會跳到官方帳號後台的「回應設定」：把 <b>自動回應訊息</b> 關閉、<b>Webhook</b> 開啟。'
     ],
     mock: function(){ return fig(win('developers.line.biz/console/channel/…/messaging-api',
       '<div class="m-tabs"><span>Basic settings</span><span class="on">Messaging API</span><span>LIFF</span></div>'+
       '<div class="m-title" style="font-size:13px">Webhook settings</div>'+
-      '<div class="m-row"><span class="m-muted" style="width:86px">Webhook URL</span><span class="m-field hot">'+pin(2)+' https://script.google.com/macros/s/…/exec</span><span class="m-btn">Verify</span></div>'+
+      '<div class="m-row"><span class="m-muted" style="width:86px">Webhook URL</span><span class="m-field hot">'+pin(2)+' '+rl('https://script.google.com/macros/s/…/exec','https://my-ai-bot.xiaoming.workers.dev')+'</span><span class="m-btn">Verify</span></div>'+
       '<div class="m-row"><span class="m-muted" style="width:86px">Use webhook</span><span class="m-toggle hot"></span>'+pin(3)+'</div>'+
       '<div class="m-dialog" style="box-shadow:none"><span class="m-muted">官方帳號後台 › 回應設定</span>'+
       '<div class="m-row"><span style="flex:1">自動回應訊息</span><span class="m-toggle off hot"></span>'+pin(4)+'</div>'+
@@ -647,7 +904,7 @@ var LINE = [
       'LINE Developers 的 Messaging API 分頁最上方有 <b>QR code</b>，用手機 LINE 掃描加入好友。',
       '傳一句話，例如「高血壓的人早餐可以吃什麼？」',
       '等 3～10 秒，收到 AI 的回覆就成功了！',
-      '想換機器人個性：回第 5 步改角色，重新複製程式碼貼上，再「部署新版本」。'
+      '想換機器人個性：回第 '+rl(5,6)+' 步改角色，重新複製程式碼貼上，再'+rl('「部署新版本」','按一次 Deploy')+'。'
     ],
     mock: function(){ return fig(phone('line','小明的 AI 助理',
       '<div class="bub me">高血壓的人早餐可以吃什麼？</div>'+
@@ -655,10 +912,11 @@ var LINE = [
     check:['手機 LINE 收到 AI 的回答'],
     pit:['沒反應？看頁面下方「卡住了？」的第一題'] }
 ];
-LINE[4] = S_CODE('line'); LINE[5] = S_DEPLOY('line');
+LINE[4] = isCF() ? S_CF_CREATE('line') : S_CODE('line'); LINE[5] = isCF() ? S_CF_CODE('line') : S_DEPLOY('line');
+return LINE; }
 
 /* ---------- Telegram steps ---------- */
-var TG = [
+function buildTG(){ var TG = [
   S_GEMINI,
   { t:'跟 BotFather 申請機器人', s:'拿到 Telegram token', time:'3 分鐘', tool:'token',
     why:'Telegram 官方用一個叫 BotFather 的機器人來幫大家建立機器人。聊幾句就能拿到 token（機器人的通行權杖）。',
@@ -682,7 +940,7 @@ var TG = [
   { t:'把網址告訴 Telegram', s:'設定 Webhook', time:'2 分鐘', tool:'webhook',
     why:'Telegram 需要知道「有人傳訊息時要通知哪個網址」。我們用瀏覽器打開一個特製網址，就能完成設定。',
     acts:[
-      '確認下方小工具已填好 token 和 <code class="inl">/exec</code> 網址（前兩步填過就會自動帶入）。',
+      '確認下方小工具已填好 token 和 '+rl('<code class="inl">/exec</code> 網址','Worker 網址')+'（前面的步驟填過就會自動帶入）。',
       '按 <span class="ui">開啟設定網址</span>，瀏覽器會開一個新分頁。',
       '畫面出現 <code class="inl">"ok":true</code> 和 <code class="inl">Webhook was set</code> 就成功了。'
     ],
@@ -696,7 +954,7 @@ var TG = [
       'Telegram 搜尋你的機器人帳號（例如 @xiaoming_ai_bot），或點 BotFather 給你的 t.me 連結。',
       '按 <span class="ui">開始</span>（會送出 /start），機器人會打招呼。',
       '傳一句話，例如「幫我用三點說明什麼是失智症」，等幾秒收到回覆就成功了！',
-      '想換機器人個性：回第 3 步改角色，重新複製程式碼貼上，再「部署新版本」。'
+      '想換機器人個性：回第 '+rl(3,4)+' 步改角色，重新複製程式碼貼上，再'+rl('「部署新版本」','按一次 Deploy')+'。'
     ],
     mock: function(){ return fig(phone('tg','小明的 AI 助理',
       '<div class="bub me">/start</div><div class="bub">嗨！我是 AI 小幫手，直接打字問我吧。</div>'+
@@ -705,11 +963,13 @@ var TG = [
     check:['Telegram 收到 AI 的回答'],
     pit:['/start 有回、後面沒反應，或同一題回兩次：看頁面下方「卡住了？」的 Telegram 題目'] }
 ];
-TG[2] = S_CODE('telegram'); TG[3] = S_DEPLOY('telegram');
+TG[2] = isCF() ? S_CF_CREATE('telegram') : S_CODE('telegram'); TG[3] = isCF() ? S_CF_CODE('telegram') : S_DEPLOY('telegram');
+return TG; }
 
-var TRACKS = { line: LINE, telegram: TG };
-function cur(){ return TRACKS[state.pf]; }
-function doneKey(){ return 'aibot-done-' + state.pf; }
+var TRACKS = { line: 1, telegram: 1 };
+function cur(){ return state.pf === 'line' ? buildLINE() : buildTG(); }
+function sfx(){ return state.pf + (isCF() ? '-cf' : ''); }
+function doneKey(){ return 'aibot-done-' + sfx(); }
 function getDone(){ return store(doneKey()) || []; }
 function setDone(arr){ store(doneKey(), arr); }
 
@@ -719,13 +979,14 @@ function renderFlow(){
   var nodes = [
     ['STEP A','學員的手機','在 '+pfName+' 傳一句話'],
     ['STEP B', pfName+' 伺服器','把訊息轉給 Webhook 網址'],
-    ['STEP C','Apps Script 中繼站','你貼上的程式碼，免費放在 Google 雲端'],
+    ['STEP C', rl('Apps Script 中繼站','Cloudflare Workers 中繼站'), rl('你貼上的程式碼，免費放在 Google 雲端','你貼上的程式碼，免費放在 Cloudflare 雲端')],
     ['STEP D','Gemini AI','想出答案'],
     ['STEP E','回到手機','中繼站把答案送回 '+pfName]
   ];
   $('#flowRow').innerHTML = nodes.map(function(n, i){
     return (i ? '<span class="arrow">→</span>' : '') + '<div class="node'+(i===2?' key':'')+'"><span class="ic">'+n[0]+'</span><b>'+n[1]+'</b><span>'+n[2]+'</span></div>';
   }).join('');
+  $('#prepRelay').hidden = !isCF();
   $('#prepPf').textContent = state.pf==='line' ? 'LINE 帳號（手機）' : 'Telegram 帳號（手機或電腦版）';
 }
 
@@ -744,30 +1005,31 @@ function toolHTML(kind){
   var pfName = state.pf==='line' ? 'LINE' : 'Telegram';
   var tokLabel = state.pf==='line' ? 'LINE Channel access token' : 'Telegram token';
   if(kind === 'token'){
-    return '<div class="tool"><h3>小工具：先把 '+tokLabel+' 放這裡</h3><p>只暫存在這個分頁，重新整理就會清空，不會上傳。第 '+(state.pf==='line'?5:3)+' 步產生程式碼時會自動帶入。</p>'+
+    return '<div class="tool"><h3>小工具：先把 '+tokLabel+' 放這裡</h3><p>只暫存在這個分頁，重新整理就會清空，不會上傳。第 '+((state.pf==='line'?5:3)+(isCF()?1:0))+' 步產生程式碼時會自動帶入。</p>'+
       '<div class="fields"><label class="fld">'+tokLabel+'<input id="in-tok" autocomplete="off" spellcheck="false" placeholder="'+(state.pf==='line'?'貼上約 170 字元的權杖':'例如 7712345678:AAHk…')+'" value="'+esc(state.pfToken)+'"></label></div>'+
       '<span class="toast" id="tokMsg"></span></div>';
   }
   if(kind === 'code'){
     var chips = Object.keys(PERSONAS).map(function(k){ return '<button type="button" data-persona="'+k+'">'+k+'</button>'; }).join('');
-    return '<div class="tool"><h3>小工具：產生你的程式碼</h3><p>填好後按「複製程式碼」，貼到 Apps Script。金鑰只在你的瀏覽器裡組合，不會上傳或儲存。也可以不填，貼上後再手動把中文提示換成金鑰。</p>'+
+    return '<div class="tool"><h3>小工具：產生你的程式碼</h3><p>填好後按「複製程式碼」，貼到 '+rl('Apps Script','Worker 的編輯器')+'。金鑰只在你的瀏覽器裡組合，不會上傳或儲存。也可以不填，貼上後再手動把中文提示換成金鑰。</p>'+
       '<div class="fields">'+
         '<label class="fld">Gemini API 金鑰（第 1 步）<input id="in-gem" autocomplete="off" spellcheck="false" placeholder="AIza…" value="'+esc(state.gemKey)+'"></label>'+
         '<label class="fld">'+tokLabel+'（第 '+(state.pf==='line'?4:2)+' 步）<input id="in-tok" autocomplete="off" spellcheck="false" placeholder="貼上 '+pfName+' 權杖" value="'+esc(state.pfToken)+'"></label>'+
       '</div>'+
       '<label class="fld">機器人的角色（SYSTEM_PROMPT）<div class="presets">'+chips+'</div><textarea id="in-persona">'+esc(state.persona)+'</textarea></label>'+
       '<label class="fld">Gemini 模型（聊天機器人建議用「快速」；出現「model is no longer available」時，換成錯誤訊息建議的名稱）<div class="presets">'+Object.keys(MODEL_PRESETS).map(function(k){ return '<button type="button" data-model="'+MODEL_PRESETS[k]+'">'+k+'</button>'; }).join('')+'</div><input id="in-model" autocomplete="off" spellcheck="false" value="'+esc(state.model)+'"></label>'+
-      '<div class="code-wrap"><button class="copy" id="copyCode">複製程式碼</button><pre class="code" id="codeOut"></pre></div></div>';
+      '<div class="code-wrap"><button class="copy" id="copyCode">複製程式碼</button><pre class="code" id="codeOut"></pre></div>'+
+      (isCF() ? '<label class="fld">你的 Worker 網址（上一步）<input id="in-gas" autocomplete="off" spellcheck="false" placeholder="https://my-ai-bot.xiaoming.workers.dev" value="'+esc(state.gasUrl)+'"></label><div class="row-btns"><a class="btn" id="cfTest" target="_blank" rel="noopener">開啟測試網址 ↗</a><span class="toast" id="gasMsg"></span></div>' : '')+'</div>';
   }
   if(kind === 'gasurl'){
-    return '<div class="tool"><h3>小工具：貼上你的 /exec 網址</h3><p>下一步會用到。只暫存在這個分頁。</p>'+
-      '<label class="fld">網頁應用程式網址<input id="in-gas" autocomplete="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec" value="'+esc(state.gasUrl)+'"></label>'+
+    return '<div class="tool"><h3>小工具：貼上你的 '+rl('/exec','Worker')+' 網址</h3><p>後面的步驟會用到。只暫存在這個分頁。</p>'+
+      '<label class="fld">'+rl('網頁應用程式網址','Worker 網址')+'<input id="in-gas" autocomplete="off" spellcheck="false" placeholder="'+rl('https://script.google.com/macros/s/…/exec','https://my-ai-bot.xiaoming.workers.dev')+'" value="'+esc(state.gasUrl)+'"></label>'+
       '<span class="toast" id="gasMsg"></span></div>';
   }
   if(kind === 'webhook'){
     return '<div class="tool"><h3>小工具：產生 Telegram 設定網址</h3><p>網址只在你的瀏覽器裡組合，會直接開到 Telegram 官方的 api.telegram.org。</p>'+
       '<div class="fields"><label class="fld">Telegram token<input id="in-tok" autocomplete="off" spellcheck="false" placeholder="7712345678:AAHk…" value="'+esc(state.pfToken)+'"></label>'+
-      '<label class="fld">Apps Script /exec 網址<input id="in-gas" autocomplete="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec" value="'+esc(state.gasUrl)+'"></label></div>'+
+      '<label class="fld">'+rl('Apps Script /exec 網址','Worker 網址')+'<input id="in-gas" autocomplete="off" spellcheck="false" placeholder="'+rl('https://script.google.com/macros/s/…/exec','https://my-ai-bot.xiaoming.workers.dev')+'" value="'+esc(state.gasUrl)+'"></label></div>'+
       '<div class="outurl" id="whUrl"></div>'+
       '<div class="row-btns"><a class="btn" id="whOpen" target="_blank" rel="noopener">開啟設定網址 ↗</a><a class="btn sec" id="whInfo" target="_blank" rel="noopener">查看目前設定 ↗</a><span class="toast" id="gasMsg"></span></div></div>';
   }
@@ -786,11 +1048,14 @@ function wireTool(kind){
   }
   function checkGas(){
     var m = $('#gasMsg'); var v = state.gasUrl.trim();
-    if(m) m.textContent = !v ? '' : (/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(v) ? '✓ 網址格式正確' : (/\/dev$/.test(v) ? '這是測試網址，請用結尾 /exec 的部署網址' : '網址應該以 https://script.google.com/macros/s/ 開頭、/exec 結尾'));
+    var good = isCF() ? /^https:\/\/[\w-]+\.[\w-]+\.workers\.dev\/?$/.test(v) : /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(v);
+    if(m) m.textContent = !v ? '' : (good ? '✓ 網址格式正確' : (isCF() ? '網址應該像 https://名稱.你的子網域.workers.dev，後面不要加其他東西' : (/\/dev$/.test(v) ? '這是測試網址，請用結尾 /exec 的部署網址' : '網址應該以 https://script.google.com/macros/s/ 開頭、/exec 結尾')));
+    var ct = $('#cfTest');
+    if(ct){ if(good){ ct.href = v.replace(/\/$/, '') + '/?test=1'; ct.removeAttribute('aria-disabled'); ct.style.opacity=''; } else { ct.removeAttribute('href'); ct.setAttribute('aria-disabled','true'); ct.style.opacity='.4'; } }
     var w = $('#whUrl');
     if(w){
       var t = state.pfToken.trim(), ok = t && v;
-      var url = 'https://api.telegram.org/bot' + (t || '〈token〉') + '/setWebhook?url=' + encodeURIComponent(v || '〈你的 exec 網址〉') + '&drop_pending_updates=true';
+      var url = 'https://api.telegram.org/bot' + (t || '〈token〉') + '/setWebhook?url=' + encodeURIComponent(v || rl('〈你的 exec 網址〉','〈你的 Worker 網址〉')) + '&drop_pending_updates=true';
       w.textContent = url;
       var a = $('#whOpen'), b = $('#whInfo');
       if(ok){ a.href = url; a.removeAttribute('aria-disabled'); a.style.opacity=''; } else { a.removeAttribute('href'); a.setAttribute('aria-disabled','true'); a.style.opacity='.4'; }
@@ -837,7 +1102,7 @@ function markDone(i, on){
 }
 function go(i, noScroll){
   state.idx = Math.max(0, Math.min(cur().length-1, i));
-  store('aibot-idx-'+state.pf, state.idx);
+  store('aibot-idx-'+sfx(), state.idx);
   renderList(); renderPanel();
   if(!noScroll && window.innerWidth < 860){ $('#panel').scrollIntoView({behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block:'start'}); }
 }
@@ -846,8 +1111,10 @@ function setPf(pf, fromHash){
   state.pf = pf;
   document.body.dataset.platform = pf;
   document.querySelectorAll('[data-pf]').forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.pf === pf)); });
-  if(!fromHash && location.hash !== '#'+pf){ try{ history.replaceState(null, '', '#'+pf); }catch(e){ location.hash = pf; } }
-  var saved = store('aibot-idx-'+pf);
+  document.body.dataset.relay = state.relay;
+  document.querySelectorAll('[data-relay]').forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.relay === state.relay)); });
+  if(!fromHash && location.hash !== '#'+sfx()){ try{ history.replaceState(null, '', '#'+sfx()); }catch(e){ location.hash = sfx(); } }
+  var saved = store('aibot-idx-'+sfx());
   state.idx = typeof saved === 'number' ? saved : 0;
   renderFlow(); go(state.idx, true);
 }
@@ -860,12 +1127,16 @@ $('#bigBtn').addEventListener('click', function(){
   var on = !document.body.classList.contains('big'); document.body.classList.toggle('big', on);
   this.setAttribute('aria-pressed', String(on)); store('aibot-big', on);
 });
-window.addEventListener('hashchange', function(){ var h = location.hash.slice(1); if(TRACKS[h] && h !== state.pf) setPf(h, true); });
+function parseHash(){ var m = location.hash.slice(1).match(/^(line|telegram)(-cf)?$/); return m ? { pf: m[1], relay: m[2] ? 'cf' : 'gas' } : null; }
+function setRelay(r){ if(r !== state.relay) state.gasUrl = ''; state.relay = r; store('aibot-relay', r); }
+document.querySelectorAll('[data-relay]').forEach(function(b){ b.addEventListener('click', function(){ setRelay(b.dataset.relay); setPf(state.pf); }); });
+window.addEventListener('hashchange', function(){ var h = parseHash(); if(h && (h.pf !== state.pf || h.relay !== state.relay)){ setRelay(h.relay); setPf(h.pf, true); } });
 
 if(store('aibot-big')){ document.body.classList.add('big'); $('#bigBtn').setAttribute('aria-pressed','true'); }
-var h0 = location.hash.slice(1);
+var h0 = parseHash();
 state.pf = '';
-setPf(TRACKS[h0] ? h0 : (store('aibot-pf-last') || 'line'), !!TRACKS[h0]);
+state.relay = h0 ? h0.relay : (store('aibot-relay') === 'cf' ? 'cf' : 'gas');
+setPf(h0 ? h0.pf : (store('aibot-pf-last') || 'line'), !!h0);
 document.querySelectorAll('[data-pf]').forEach(function(b){ b.addEventListener('click', function(){ store('aibot-pf-last', b.dataset.pf); }); });
 })();
 </script>
