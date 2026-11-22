@@ -1,0 +1,608 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>衛教小幫手機器人</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="一步一步做出給民眾用的糖尿病衛教 LINE 機器人：只根據你的衛教資料回答，每則回答都附資料來源。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: 頂部平台切換 → 資料流程圖 → 左側步驟清單 + 右側單步內容（含示意畫面、檢查點、小工具） */
+:root{
+  --bg:#F3F6F5; --surface:#FFFFFF; --sunk:#E9EFED; --ink:#13201C; --muted:#56665F; --line:#D5DFDB;
+  --line-green:#06C755; --tg-blue:#2AABEE; --accent:#06A04A; --accent-ink:#FFFFFF; --accent-soft:#E0F5E8;
+  --warn:#9A4A06; --warn-soft:#FDF0E1; --ok:#0C7A43;
+  --code-bg:#102019; --code-ink:#DDEBE4; --code-key:#7FE0A7; --code-str:#F4C27A; --code-com:#7C948A;
+  --mock-bg:#FAFBFB; --mock-bar:#E6ECEA;
+  --f-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --f-num:"Space Grotesk","Noto Sans TC",system-ui,sans-serif;
+  --f-code:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  --base:16px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1412; --surface:#151F1C; --sunk:#1B2723; --ink:#E4EDE9; --muted:#97A8A1; --line:#2B3934;
+  --accent:#2BD879; --accent-ink:#06170E; --accent-soft:#163526; --warn:#F2B36B; --warn-soft:#33240F; --ok:#5BE39A;
+  --code-bg:#08110D; --mock-bg:#1A2522; --mock-bar:#22302C; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1412; --surface:#151F1C; --sunk:#1B2723; --ink:#E4EDE9; --muted:#97A8A1; --line:#2B3934;
+  --accent:#2BD879; --accent-ink:#06170E; --accent-soft:#163526; --warn:#F2B36B; --warn-soft:#33240F; --ok:#5BE39A;
+  --code-bg:#08110D; --mock-bg:#1A2522; --mock-bar:#22302C; color-scheme:dark}
+body[data-platform="telegram"]{--accent:#1688C9; --accent-soft:#DFF0FA}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) body[data-platform="telegram"]{--accent:#5CC3F5; --accent-soft:#12293A; --accent-ink:#041520}}
+:root[data-theme="dark"] body[data-platform="telegram"]{--accent:#5CC3F5; --accent-soft:#12293A; --accent-ink:#041520}
+
+*{box-sizing:border-box}
+body{background:var(--bg); color:var(--ink); font-family:var(--f-body); font-size:var(--base); line-height:1.7; margin:0}
+body.big{--base:20px}
+.wrap{max-width:1180px; margin:0 auto; padding-block:24px 64px; padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); display:flex; flex-direction:column; gap:22px}
+h1,h2,h3{text-wrap:balance; line-height:1.3; margin:0}
+a{color:var(--accent)}
+button{font:inherit; cursor:pointer}
+:focus-visible{outline:3px solid var(--accent); outline-offset:2px}
+
+/* header */
+.top{display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:16px}
+.brand small{display:block; font-family:var(--f-num); letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-size:.75em}
+.brand h1{font-size:clamp(1.6rem, 4vw, 2.3rem); font-weight:900}
+.brand p{margin:4px 0 0; color:var(--muted); max-width:60ch}
+.controls{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+.seg{display:inline-flex; background:var(--sunk); border-radius:999px; padding:4px; gap:4px}
+.seg button{border:0; background:transparent; color:var(--muted); padding:8px 16px; border-radius:999px; font-weight:700; display:flex; align-items:center; gap:8px}
+.seg button[aria-pressed="true"]{background:var(--surface); color:var(--ink); box-shadow:0 1px 3px rgb(0 0 0 / .12)}
+.seg .dot{width:12px; height:12px; border-radius:50%}
+.ghost{border:1px solid var(--line); background:var(--surface); color:var(--ink); border-radius:999px; padding:8px 14px; font-weight:500}
+.ghost[aria-pressed="true"]{border-color:var(--accent); color:var(--accent)}
+
+/* flow */
+.flow{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:18px 20px}
+.flow h2{font-size:1.05em; margin-bottom:12px}
+.flow-row{display:flex; align-items:stretch; gap:6px; overflow-x:auto; padding-bottom:4px}
+.node{flex:1 1 0; min-width:120px; background:var(--sunk); border-radius:12px; padding:10px 12px; display:flex; flex-direction:column; gap:2px}
+.node b{font-size:.95em}
+.node span{font-size:.8em; color:var(--muted); line-height:1.45}
+.node.key{background:var(--accent-soft)}
+.node .ic{font-family:var(--f-num); font-weight:700; font-size:.72em; color:var(--accent); letter-spacing:.08em}
+.arrow{align-self:center; color:var(--muted); font-family:var(--f-num); flex:0 0 auto}
+.flow-note{margin:10px 0 0; font-size:.85em; color:var(--muted)}
+
+/* prep */
+.prep{display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:.9em}
+.prep b{margin-right:4px}
+.chip{background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:4px 12px}
+
+/* main */
+.main{display:grid; grid-template-columns:280px minmax(0,1fr); gap:22px; align-items:start}
+.side{min-width:0; position:sticky; top:calc(env(safe-area-inset-top, 0px) + 12px); background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:14px; display:flex; flex-direction:column; gap:10px}
+.prog{display:flex; flex-direction:column; gap:6px; padding:2px 4px 8px; border-bottom:1px solid var(--line)}
+.prog-top{display:flex; justify-content:space-between; font-size:.85em; color:var(--muted)}
+.prog-top b{font-family:var(--f-num); color:var(--ink)}
+.bar{height:8px; background:var(--sunk); border-radius:99px; overflow:hidden}
+.bar i{display:block; height:100%; background:var(--accent); width:0; transition:width .4s}
+.steps{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:2px}
+.steps button{width:100%; text-align:left; border:0; background:transparent; color:var(--ink); padding:8px 8px; border-radius:10px; display:grid; grid-template-columns:28px 1fr; gap:10px; align-items:center; line-height:1.35}
+.steps button:hover{background:var(--sunk)}
+.steps button[aria-current="step"]{background:var(--accent-soft)}
+.num{width:28px; height:28px; border-radius:50%; display:grid; place-items:center; font-family:var(--f-num); font-weight:700; font-size:.85em; border:2px solid var(--line); color:var(--muted); background:var(--surface)}
+.steps button[aria-current="step"] .num{border-color:var(--accent); color:var(--accent)}
+.steps .done .num{background:var(--accent); border-color:var(--accent); color:var(--accent-ink)}
+.steps small{display:block; color:var(--muted); font-size:.78em}
+.reset{border:0; background:none; color:var(--muted); font-size:.8em; text-decoration:underline; align-self:flex-start; padding:4px}
+
+.panel{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:24px; display:flex; flex-direction:column; gap:20px; min-width:0}
+.phead{display:flex; flex-direction:column; gap:6px}
+.eyebrow{font-family:var(--f-num); font-weight:700; color:var(--accent); font-size:.8em; letter-spacing:.1em; text-transform:uppercase}
+.phead h2{font-size:clamp(1.35rem, 3vw, 1.75rem); font-weight:900}
+.why{margin:0; color:var(--muted); max-width:65ch}
+.meta{display:flex; gap:8px; flex-wrap:wrap; font-size:.8em}
+.meta span{background:var(--sunk); padding:2px 10px; border-radius:99px; color:var(--muted)}
+.cols{display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); gap:24px; align-items:start}
+.cols.single{grid-template-columns:minmax(0,1fr)}
+.actions{margin:0; padding:0; list-style:none; counter-reset:a; display:flex; flex-direction:column; gap:12px}
+.actions li{counter-increment:a; display:grid; grid-template-columns:30px 1fr; gap:10px; min-width:0}
+.actions li::before{content:counter(a); width:26px; height:26px; border-radius:8px; background:var(--accent); color:var(--accent-ink); font-family:var(--f-num); font-weight:700; display:grid; place-items:center; font-size:.85em; margin-top:2px}
+.actions li > div{min-width:0}
+kbd,.ui{font-family:var(--f-body); background:var(--sunk); border:1px solid var(--line); border-bottom-width:2px; border-radius:6px; padding:0 6px; font-size:.9em; white-space:nowrap; font-weight:500}
+code.inl{font-family:var(--f-code); background:var(--sunk); padding:1px 6px; border-radius:5px; font-size:.86em; word-break:break-all}
+.link-out{display:inline-flex; align-items:center; gap:6px; margin-top:6px; background:var(--accent); color:var(--accent-ink); text-decoration:none; padding:6px 14px; border-radius:999px; font-weight:700; font-size:.88em}
+
+.box{border-radius:12px; padding:14px 16px; font-size:.92em}
+.box h3{font-size:.95em; margin-bottom:4px}
+.box ul{margin:4px 0 0; padding-left:1.2em}
+.check{background:var(--accent-soft)}
+.check h3{color:var(--ok)}
+.pit{background:var(--warn-soft)}
+.pit h3{color:var(--warn)}
+.boxes{display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:12px}
+
+/* mockups */
+.fig{margin:0; display:flex; flex-direction:column; gap:6px}
+.fig figcaption{font-size:.75em; color:var(--muted)}
+.mock{border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--mock-bg); font-size:13px; line-height:1.5; box-shadow:0 6px 20px rgb(0 0 0 / .06)}
+.mock-bar{background:var(--mock-bar); display:flex; align-items:center; gap:6px; padding:7px 10px}
+.mock-bar i{width:9px; height:9px; border-radius:50%; background:var(--line)}
+.mock-bar span{margin-left:8px; background:var(--mock-bg); border-radius:6px; padding:1px 10px; font-family:var(--f-code); font-size:11px; color:var(--muted); flex:1; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis}
+.mock-body{padding:14px; display:flex; flex-direction:column; gap:8px; position:relative}
+.m-row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+.m-title{font-weight:700; font-size:14px}
+.m-muted{color:var(--muted); font-size:12px}
+.m-btn{display:inline-flex; align-items:center; gap:4px; border:1px solid var(--line); background:var(--surface); border-radius:6px; padding:3px 10px; font-size:12px; color:var(--ink)}
+.m-btn.pri{background:#1A73E8; color:#fff; border-color:#1A73E8}
+.m-btn.lg{background:#06C755; color:#fff; border-color:#06C755}
+.m-field{border:1px solid var(--line); background:var(--surface); border-radius:6px; padding:4px 8px; font-size:12px; flex:1; min-width:120px; font-family:var(--f-code); color:var(--muted); overflow:hidden; white-space:nowrap; text-overflow:ellipsis}
+.m-side{display:flex; gap:10px}
+.m-nav{display:flex; flex-direction:column; gap:3px; min-width:92px; border-right:1px solid var(--line); padding-right:8px; font-size:12px; color:var(--muted)}
+.m-nav .on{color:var(--ink); font-weight:700; background:var(--sunk); border-radius:4px; padding:0 4px}
+.m-main{flex:1; display:flex; flex-direction:column; gap:7px; min-width:0}
+.m-tabs{display:flex; gap:12px; font-size:12px; border-bottom:1px solid var(--line); padding-bottom:4px; color:var(--muted); flex-wrap:wrap}
+.m-tabs .on{color:var(--ink); font-weight:700; border-bottom:2px solid #06C755}
+.m-toggle{width:30px; height:16px; border-radius:99px; background:#06C755; position:relative; display:inline-block; flex:0 0 auto}
+.m-toggle::after{content:""; position:absolute; right:2px; top:2px; width:12px; height:12px; border-radius:50%; background:#fff}
+.m-toggle.off{background:var(--line)}
+.m-toggle.off::after{right:auto; left:2px}
+.m-code{background:var(--code-bg); color:var(--code-ink); font-family:var(--f-code); font-size:11px; border-radius:6px; padding:8px 10px; line-height:1.6; white-space:pre; overflow:hidden}
+.m-dialog{border:1px solid var(--line); background:var(--surface); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:7px; box-shadow:0 8px 24px rgb(0 0 0 / .12)}
+.m-kv{display:grid; grid-template-columns:96px 1fr; gap:6px; align-items:center; font-size:12px}
+.m-select{border:1px solid var(--line); border-radius:6px; padding:2px 8px; background:var(--surface)}
+.hot{outline:2.5px solid #F05A28; outline-offset:2px; border-radius:6px; position:relative; animation:pulse 1.8s ease-in-out infinite}
+@keyframes pulse{50%{outline-color:rgb(240 90 40 / .35)}}
+.pin{display:inline-grid; place-items:center; width:18px; height:18px; border-radius:50%; background:#F05A28; color:#fff; font-family:var(--f-num); font-size:11px; font-weight:700; flex:0 0 auto}
+/* phone mock */
+.phone{width:min(280px, 100%); margin:0 auto; border:8px solid var(--ink); border-radius:28px; overflow:hidden; background:var(--mock-bg); font-size:13px; line-height:1.45}
+.ph-top{padding:10px 12px; font-weight:700; display:flex; align-items:center; gap:8px; color:#fff}
+.ph-top.line{background:#06C755}
+.ph-top.tg{background:#2AABEE}
+.ph-av{width:24px; height:24px; border-radius:50%; background:rgb(255 255 255 / .35)}
+.ph-body{padding:12px; display:flex; flex-direction:column; gap:8px; min-height:220px}
+.bub{max-width:82%; padding:7px 11px; border-radius:14px; background:var(--surface); border:1px solid var(--line); align-self:flex-start}
+.bub.me{align-self:flex-end; background:#B8F2C9; border-color:#B8F2C9; color:#10301C}
+.tgc .bub.me{background:#D6F0FD; border-color:#D6F0FD; color:#0B2C3E}
+.bub code{font-family:var(--f-code); font-size:11px; word-break:break-all; color:var(--ink)}
+.bub.tok code{background:#FFF4C2; color:#3B2F00; padding:0 3px; border-radius:3px}
+
+/* tool */
+.tool{border:2px dashed var(--accent); border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:12px; background:var(--bg)}
+.tool h3{font-size:1.05em}
+.tool p{margin:0; font-size:.88em; color:var(--muted)}
+.fields{display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:12px}
+.fld{display:flex; flex-direction:column; gap:4px; font-size:.88em; font-weight:500}
+.fld input,.fld textarea,.fld select{font:inherit; font-weight:400; border:1px solid var(--line); background:var(--surface); color:var(--ink); border-radius:8px; padding:8px 10px; width:100%}
+.fld textarea{min-height:70px; resize:vertical}
+.fld input{font-family:var(--f-code); font-size:.9em}
+.presets{display:flex; gap:6px; flex-wrap:wrap}
+.presets button{border:1px solid var(--line); background:var(--surface); color:var(--ink); border-radius:99px; padding:2px 10px; font-size:.82em}
+.code-wrap{position:relative; min-width:0}
+pre.code{margin:0; background:var(--code-bg); color:var(--code-ink); font-family:var(--f-code); font-size:12.5px; line-height:1.65; padding:16px; border-radius:12px; overflow:auto; max-height:420px; tab-size:2}
+pre.code .k{color:var(--code-key)} pre.code .s{color:var(--code-str)} pre.code .c{color:var(--code-com); font-style:italic}
+.copy{position:absolute; top:10px; right:10px; border:0; background:var(--accent); color:var(--accent-ink); border-radius:8px; padding:6px 12px; font-weight:700; font-size:.82em}
+.outurl{font-family:var(--f-code); font-size:.82em; background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:10px; word-break:break-all; user-select:all}
+.row-btns{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+.btn{border:0; background:var(--accent); color:var(--accent-ink); border-radius:10px; padding:10px 18px; font-weight:700; text-decoration:none; display:inline-flex; align-items:center; gap:6px}
+.btn.sec{background:var(--sunk); color:var(--ink)}
+.btn[disabled]{opacity:.4; cursor:not-allowed}
+.toast{font-size:.85em; color:var(--ok); font-weight:700}
+
+.nav{display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; border-top:1px solid var(--line); padding-top:16px}
+.donebox{display:flex; align-items:center; gap:10px; font-weight:700; cursor:pointer; user-select:none}
+.donebox input{width:22px; height:22px; accent-color:var(--accent)}
+
+/* faq */
+.faq{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:20px 24px; display:flex; flex-direction:column; gap:6px}
+.faq > h2{font-size:1.25em; margin-bottom:6px}
+.faq details{border-top:1px solid var(--line); padding:10px 0}
+.faq summary{font-weight:700; cursor:pointer}
+.faq details p, .faq details ul{margin:8px 0 0; color:var(--muted); font-size:.93em}
+.more{display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px}
+.more div{background:var(--sunk); border-radius:12px; padding:12px 14px; font-size:.9em}
+.more b{display:block}
+footer{font-size:.8em; color:var(--muted); text-align:center}
+
+@media (max-width: 860px){
+  .main{grid-template-columns:minmax(0,1fr)}
+  .side{position:static}
+  .steps{flex-direction:row; overflow-x:auto; gap:6px; padding-bottom:4px}
+  .steps li{flex:0 0 auto}
+  .steps button{width:auto; grid-template-columns:28px auto; padding:6px 10px 6px 6px; border:1px solid var(--line)}
+  .steps small{display:none}
+  .cols{grid-template-columns:minmax(0,1fr)}
+  .panel{padding:18px}
+}
+@media (prefers-reduced-motion: reduce){.hot{animation:none} .bar i{transition:none}}
+.kb{width:100%; border-collapse:collapse; font-size:.86em}
+.kb th,.kb td{border:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top}
+.kb th{background:var(--sunk); white-space:nowrap}
+.tbl-wrap{overflow-x:auto}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <small>進階 · Gemini × Apps Script × Google 試算表知識庫</small>
+      <h1>衛教小幫手機器人</h1>
+      <p>給民眾用的糖尿病衛教 LINE 機器人：民眾打字發問，它只根據你放在試算表裡的衛教資料回答，每則回答都附上資料來源。內容、語氣、提醒文字都可以自己調整。需要先完成 <a href="./">基本版</a>，手上已經有 Gemini 金鑰。約 30 分鐘。</p>
+    </div>
+    <div class="controls"><a class="ghost" href="./" style="text-decoration:none">← 回基本版教學</a><a class="ghost" href="secretary.html" style="text-decoration:none">AI 秘書版</a></div>
+  </header>
+  <section class="flow" aria-labelledby="flowh"><h2 id="flowh">一個問題是怎麼被回答的</h2>
+    <div class="flow-row">
+      <div class="node"><span class="ic">1</span><b>民眾在 LINE 發問</b><span>「低血糖怎麼辦？」</span></div><span class="arrow">→</span>
+      <div class="node"><span class="ic">2</span><b>先擋緊急狀況</b><span>有「叫不醒、胸痛」等字，直接請對方撥 119</span></div><span class="arrow">→</span>
+      <div class="node key"><span class="ic">3</span><b>查你的知識庫</b><span>從試算表挑出最相關的幾則衛教資料</span></div><span class="arrow">→</span>
+      <div class="node"><span class="ic">4</span><b>Gemini 只根據資料回答</b><span>每個重點標出用了哪一則；資料沒有就說找不到</span></div><span class="arrow">→</span>
+      <div class="node key"><span class="ic">5</span><b>程式附上來源</b><span>來源名稱和網址從試算表帶出，再加上提醒文字</span></div>
+    </div>
+    <p class="flow-note">這種做法叫 RAG（先查資料再回答）。AI 負責把資料講成好懂的話，內容和出處由你的知識庫決定。</p>
+  </section>
+  <div class="boxes">
+    <div class="box check"><h3>✓ 它會做的事</h3><ul><li>回答知識庫裡有的衛教問題，並附資料來源（名稱與網址）</li><li>知識庫沒有的，明說找不到，請對方問醫療團隊</li><li>緊急關鍵字直接回就醫提醒</li><li>把民眾的提問記到試算表（不記是誰問的），讓你知道該補什麼</li><li>一律用繁體中文回覆</li></ul></div>
+    <div class="box pit"><h3>! 使用前要知道</h3><ul><li>示範資料是教學用的摘要，不是正式指引。給民眾用之前一定要換成你們單位審核過的內容</li><li>它不能診斷、不能調整用藥，遇到這類問題會請對方找醫療團隊</li><li>每則訊息是獨立的，它不記得上一句</li><li>只看得懂文字，照片和語音不處理</li><li>這一版只接 LINE</li></ul></div>
+  </div>
+<article class="panel" style="margin-top:18px"><div class="phead"><span class="eyebrow">第 1 步 / 共 7 步</span><h2>建立知識庫試算表</h2><p class="why">衛教內容放在你自己的 Google 試算表，一列一個主題。以後要新增、修改衛教內容，只要改試算表，不用碰程式。</p></div><ol class="actions"><li><div>開一個新的 Google 試算表，改名為 <code class="inl">衛教知識庫</code>。<br><a class="link-out" href="https://sheets.new" target="_blank" rel="noopener">開啟新的試算表 ↗</a></div></li><li><div>上方選單點 <span class="ui">擴充功能</span> → <span class="ui">Apps Script</span>，會開啟寫程式的分頁。把左上角的專案名稱改成「衛教小幫手」。</div></li><li><div>一定要從試算表的「擴充功能」進去。直接到 script.google.com 開新專案，程式會找不到知識庫。</div></li><li><div>另外準備一個<b>新的 LINE 官方帳號</b>給民眾加好友（照<a href="./#line">基本版</a>的第 2 到 4 步做：建立帳號、啟用 Messaging API、取得 Channel access token）。不要用你私人筆記或秘書用的那個帳號。</div></li></ol></article><article class="panel" style="margin-top:18px"><div class="phead"><span class="eyebrow">第 2 步 / 共 7 步</span><h2>產生並貼上程式碼</h2><p class="why">在下面填好金鑰和小幫手的名字，整份複製貼到 Apps Script。</p></div><ol class="actions"><li><div>在下方小工具填入 Gemini 金鑰、LINE 權杖、小幫手的名字和你的單位名稱。</div></li><li><div>按 <span class="ui">複製程式碼</span>，回到 Apps Script 編輯器，把原本的內容全部刪掉、貼上，按 <kbd>Ctrl</kbd>＋<kbd>S</kbd>（Mac 用 <kbd>⌘</kbd>＋<kbd>S</kbd>）儲存。</div></li><li><div>程式碼最上面「只要改這一區」是之後可以自由調整的地方，現在先不用改。</div></li></ol><div class="tool"><h3>小工具：產生衛教小幫手的程式碼</h3><p>金鑰只在你的瀏覽器裡組合，不會上傳或儲存。</p>
+<div class="fields"><label class="fld">Gemini API 金鑰<input id="e-gem" autocomplete="off" spellcheck="false" placeholder="AQ.… 或 AIza…"></label>
+<label class="fld">LINE Channel access token<input id="e-line" autocomplete="off" spellcheck="false" placeholder="約 170 字元"></label>
+<label class="fld">小幫手的名字<input id="e-name" autocomplete="off" style="font-family:var(--f-body)" value="小糖"></label>
+<label class="fld">你的單位名稱<input id="e-org" autocomplete="off" style="font-family:var(--f-body)" value="示範衛教室"></label>
+<label class="fld">衛教主題<input id="e-topic" autocomplete="off" style="font-family:var(--f-body)" value="糖尿病"></label></div>
+<div class="code-wrap"><button class="copy" id="e-copy">複製程式碼</button><pre class="code" id="e-code"></pre></div></div></article><article class="panel" style="margin-top:18px"><div class="phead"><span class="eyebrow">第 3 步 / 共 7 步</span><h2>執行 setupKB 並授權</h2><p class="why">讓程式建立「知識庫」和「提問記錄」兩個工作表，放進 8 則示範資料，順便測試金鑰。</p></div><ol class="actions"><li><div>上方函式選單選 <span class="ui">setupKB</span>，按 <span class="ui">▶ 執行</span>。</div></li><li><div>出現授權視窗：<span class="ui">審查權限</span> → 選你的帳號 → <span class="ui">進階</span> → <span class="ui">前往「衛教小幫手」（不安全）</span> → <span class="ui">允許</span>。這是你自己的程式，所以 Google 會提示未經驗證。</div></li><li><div>執行記錄出現三行：已放進 8 則示範資料、知識庫目前有 8 則可以用的資料、Gemini 測試：……。</div></li><li><div>回試算表分頁，會看到「知識庫」工作表：編號、主題、內容、來源名稱、來源網址。</div></li><li><div>如果 Gemini 測試那一行出現「402 … 儲值金用完了」：解法在<a href="./">基本版</a>最下面的常見問題。</div></li></ol></article><article class="panel" style="margin-top:18px"><div class="phead"><span class="eyebrow">第 4 步 / 共 7 步</span><h2>不用開 LINE，先看它怎麼回答</h2><p class="why">在編輯器裡直接測三種情況：知識庫有的、知識庫沒有的、緊急狀況。</p></div><ol class="actions"><li><div>函式選單選 <span class="ui">testAsk</span>，按 <span class="ui">▶ 執行</span>。</div></li><li><div>第一題「低血糖的時候要怎麼辦？」：回答裡每個重點後面有 <code class="inl">[2]</code> 這種編號，最後列出「資料來源」和提醒。</div></li><li><div>第二題「颱風天要準備什麼？」：知識庫沒有，所以回「在我手邊的衛教資料裡找不到」。它不會自己編答案。</div></li><li><div>第三題「我爸爸叫不醒」：有緊急關鍵字，程式不問 AI，直接請對方撥 119。</div></li><li><div>回試算表看「提問記錄」工作表，三個問題和回答都記下來了。</div></li></ol><div class="cols"><figure class="fig"><div class="phone" aria-hidden="true"><div class="ph-top line"><span class="ph-av"></span>小糖</div><div class="ph-body"><div class="bub me">低血糖的時候要怎麼辦？</div><div class="bub">・意識清楚時，馬上吃 15 公克的糖，例如半杯含糖果汁或 3 顆方糖 [2]<br>・等 15 分鐘再量一次，還是低於 70 就再吃一次 [2]<br>・意識不清時不要餵食，請立刻撥 119 [2]<br><br>資料來源：<br>[2] 示範資料（請換成貴單位的衛教單張名稱）<br><br>以上是一般衛教資訊，不能取代醫師的診斷與處方。</div><div class="bub me">颱風天要準備什麼？</div><div class="bub">這個問題在我手邊的衛教資料裡找不到，建議直接詢問您的醫師、護理師或衛教師。</div></div></div><figcaption>示意圖：有資料就回答並附來源，沒有資料就明說</figcaption></figure>
+<div class="box check"><h3>✓ 這個小幫手的三個安全設計</h3><ul><li><b>只根據知識庫回答</b>：AI 被要求只能用你提供的衛教資料</li><li><b>沒有出處就不回答</b>：資料來源是程式從試算表帶出來的，不是 AI 寫的；AI 的回答如果沒有標出用了哪一則，整則不送出</li><li><b>緊急狀況不交給 AI</b>：出現「叫不醒、胸痛、想不開」這類字，直接回固定的就醫提醒</li></ul></div></div></article><article class="panel" style="margin-top:18px"><div class="phead"><span class="eyebrow">第 5 步 / 共 7 步</span><h2>部署並接上 LINE</h2><p class="why">把程式變成網址，填到新官方帳號的 Webhook。</p></div><ol class="actions"><li><div><span class="ui">部署</span> → <span class="ui">新增部署作業</span> → ⚙ 選 <span class="ui">網頁應用程式</span> → 執行身分「我」、存取權「所有人」→ <span class="ui">部署</span>，複製 <code class="inl">/exec</code> 網址。</div></li><li><div>到 LINE Developers → 你的新官方帳號 → <span class="ui">Messaging API</span> 分頁，Webhook URL 貼上網址 → <span class="ui">Update</span>，把 <b>Use webhook</b> 打開。</div></li><li><div>同一頁的 Auto-reply messages 按 <span class="ui">Edit</span>，把<b>自動回應訊息</b>關閉。「加入好友的歡迎訊息」可以留著，建議寫上「請勿傳送個人資料，緊急狀況請撥 119」。</div></li><li><div>之後只要改過程式碼，都要「部署 → 管理部署作業 → ✏️ 編輯 → 版本選新版本 → 部署」。<b>只改試算表的知識庫不用重新部署</b>，馬上生效。</div></li></ol></article><article class="panel" style="margin-top:18px"><div class="phead"><span class="eyebrow">第 6 步 / 共 7 步</span><h2>用手機驗收</h2><p class="why">加好友，實際問幾個問題。</p></div><ol class="actions"><li><div>用手機 LINE 掃官方帳號的 QR code 加好友。</div></li><li><div>傳「你好」：它會自我介紹，並列出可以問的主題。</div></li><li><div>問一個知識庫有的問題，例如「糖尿病可以吃水果嗎」「腳要怎麼保養」。確認回答最後有「資料來源」。</div></li><li><div>問一個知識庫沒有的問題，確認它回「找不到」而不是亂答。</div></li><li><div>問「可以幫我調藥嗎」：它應該請你詢問醫療團隊。</div></li><li><div>回試算表看「提問記錄」：之後民眾問了什麼、哪些題目回「找不到」，都在這裡。回「找不到」最多的題目，就是知識庫該補的內容。</div></li></ol></article><article class="panel" style="margin-top:18px"><div class="phead"><span class="eyebrow">第 7 步 / 共 7 步</span><h2>換成你們單位的衛教內容</h2><p class="why">示範資料只是教學用的摘要。要給民眾用，知識庫一定要換成你們單位審核過的正式內容，並填上真正的來源。</p></div><ol class="actions"><li><div>打開「知識庫」工作表，直接修改或新增列。一列一個主題，「內容」寫 80 到 200 個字。</div></li><li><div><b>來源名稱一定要填</b>（例如「○○醫院糖尿病衛教單張：低血糖的處理，2025 年版」）。沒填來源名稱的那一列，小幫手不會拿來回答。</div></li><li><div><b>來源網址</b>有就填，民眾會在回答最後看到，可以點進去看原文。</div></li><li><div>「編號」不能重複，用 1、2、3… 往下編就好。回答裡的 [2] 就是這個編號。</div></li><li><div>想換主題（高血壓、長照、失智照顧）：把程式碼最上面的 <code class="inl">TOPIC</code> 改掉，知識庫換成那個主題的內容。</div></li><li><div>最省力的做法：按下方 <span class="ui">複製這段話</span>，連同衛教單張的文字貼給 ChatGPT 或 Gemini，請它整理成表格，再貼進試算表。貼進去之前，請逐列對照原文確認數字沒有錯。</div></li></ol><div class="tbl-wrap"><table class="kb"><tr><th>編號</th><th>主題</th><th>內容</th><th>來源名稱</th><th>來源網址</th></tr>
+<tr><td>1</td><td>低血糖的處理</td><td>意識清楚時用「15–15 法則」：馬上吃 15 公克的糖……</td><td>（你們單位的衛教單張名稱與年份）</td><td>（單張的網址，沒有可留空）</td></tr>
+<tr><td>2</td><td>足部照護</td><td>每天檢查雙腳，包含腳底和趾縫……</td><td>（必填，沒填這一列不會被使用）</td><td></td></tr></table></div>
+<div class="tool"><h3>小工具：請 ChatGPT 或 Gemini 把衛教單張整理成知識庫</h3><p>這段話會請 AI 先問你問題（來源、對象、不想回答的內容），問清楚才動手。</p>
+<div class="code-wrap"><button class="copy" id="k-copy">複製這段話</button><pre class="code" id="k-text" style="white-space:pre-wrap; padding-top:48px"></pre></div></div>
+<div class="boxes"><div class="box pit"><h3>! 開放給民眾之前</h3><ul><li>知識庫的每一列都請專業人員看過，來源是正式、查得到的文件</li><li>自己先把常見問題問過一輪，看回答有沒有偏離原文</li><li>在官方帳號的歡迎訊息和圖文選單寫清楚：這是衛教資訊，不是看診；不要傳個人資料；緊急請撥 119</li><li>問答內容會送到 Gemini。免費方案的內容可能被 Google 用來改善產品，所以要提醒民眾不要傳姓名、身分證字號、病歷號</li><li>定期看「提問記錄」，補知識庫、修正不清楚的內容</li></ul></div>
+<div class="box check"><h3>✓ 額度</h3><ul><li>LINE 機器人「回覆」訊息不算則數，免費方案就能用</li><li>每個問題呼叫 Gemini 1 次；每人每小時上限由 <code class="inl">MAX_PER_HOUR</code> 控制</li><li>使用人數多、免費額度不夠時，再考慮 Gemini 的付費方案</li></ul></div></div></article><article class="panel" style="margin-top:18px" id="extend"><div class="phead"><span class="eyebrow">延伸</span><h2>自由調整：讓它變成你的小幫手</h2><p class="why">程式碼最上面「只要改這一區」的每一行都可以改。改完記得部署新版本。</p></div><ol class="actions"><li><div><b>名字和單位</b>：<code class="inl">BOT_NAME</code>、<code class="inl">ORG_NAME</code>，會出現在自我介紹。</div></li><li><div><b>說話方式</b>：<code class="inl">TONE</code>。例如改成「對象是長輩，句子要短，一次只講三個重點」。</div></li><li><div><b>每則回答最後的提醒</b>：<code class="inl">DISCLAIMER</code>。可以加上衛教室電話和服務時間。</div></li><li><div><b>找不到答案時的回覆</b>：<code class="inl">NOT_FOUND</code>。可以加上「請撥打衛教專線 ○○○」。</div></li><li><div><b>緊急關鍵字和回覆</b>：<code class="inl">EMERGENCY_WORDS</code>、<code class="inl">EMERGENCY_REPLY</code>。可以加上你們科別該注意的字。</div></li><li><div><b>每人每小時的題數</b>：<code class="inl">MAX_PER_HOUR</code>。<b>要不要記錄提問</b>：<code class="inl">LOG_QUESTIONS</code>。</div></li><li><div>想加新功能（例如問「掛號」直接回網址）：把程式碼貼給 ChatGPT 或 Gemini，加上下面這段話。<b>貼之前先把金鑰和權杖改成 XXXX</b>。</div></li></ol><div class="tool"><h3>小工具：請 ChatGPT 或 Gemini 幫你改程式</h3><p>這段話會請 AI 先提問再動手，並要求保留三個安全設計。</p>
+<div class="code-wrap"><button class="copy" id="c-copy">複製這段話</button><pre class="code" id="c-text" style="white-space:pre-wrap; padding-top:48px"></pre></div></div>
+<div class="boxes"><div class="box check"><h3>✓ 帶學員做的建議順序</h3><ul><li>先讓每個人用示範資料裝好、能問答</li><li>每人帶一份自己單位的衛教單張，請 AI 整理成知識庫，逐列核對</li><li>改 TONE、DISCLAIMER，做出自己單位的口吻</li><li>互相加好友出題，找出「答錯」和「找不到」的題目，回去補知識庫</li></ul></div>
+<div class="box pit"><h3>! 常見卡關</h3><ul><li>回答沒有附來源、一直回「找不到」：知識庫那一列的「來源名稱」是空的，或 AI 沒有標編號；先執行 testAsk 看結果</li><li>改了程式碼沒有變：忘了部署新版本</li><li>改了知識庫沒有變：確認改的是「知識庫」工作表，而且編號沒有重複</li><li>完全沒反應：存取權要選「所有人」，Webhook 要填 /exec 網址並打開 Use webhook</li><li>金鑰貼給了 AI：到 AI Studio 把那把金鑰刪掉，重新建立一把</li></ul></div></div></article>
+</div>
+<script type="text/plain" id="tpl-edu">
+// ===== 只要改這一區 =====
+var GEMINI_API_KEY = __KEY__;
+var LINE_TOKEN = __LINE__;
+var BOT_NAME = __NAME__;     // 小幫手的名字
+var ORG_NAME = __ORG__;      // 你的單位名稱，會出現在自我介紹裡
+var TOPIC = __TOPIC__;       // 衛教主題。換成「高血壓」「長照」也可以，知識庫的內容要跟著換
+
+// 說話的方式：想讓它更口語、更簡短、用台語語氣，都改這一句
+var TONE = '親切、口語、好懂，像衛教師在跟民眾說話。不用專有名詞；一定要用時，後面用括號解釋。回答 200 字以內，用「・」分點。';
+// 每一則回答最後都會加上這段提醒
+var DISCLAIMER = '以上是一般衛教資訊，不能取代醫師的診斷與處方。用藥與劑量請依照您的醫療團隊指示。';
+// 知識庫裡找不到答案時的回覆
+var NOT_FOUND = '這個問題在我手邊的衛教資料裡找不到，建議直接詢問您的醫師、護理師或衛教師。';
+// 訊息裡出現這些字，就不問 AI，直接回下面那段緊急提醒
+var EMERGENCY_WORDS = ['昏迷', '意識不清', '叫不醒', '昏倒', '抽搐', '胸痛', '胸悶', '喘不過氣', '呼吸困難', '嘴歪', '半邊無力', '想不開', '不想活', '自殺'];
+var EMERGENCY_REPLY = '您描述的情況可能需要立刻處理，請馬上撥打 119 或到最近的急診，不要等我的回覆。\n意識不清的人請不要餵食或餵水。';
+
+var MAX_PER_HOUR = 20;       // 每個人每小時最多問幾題，避免免費額度被用完
+var LOG_QUESTIONS = true;    // 把民眾問的問題記到「提問記錄」工作表（不記是誰問的），方便你補知識庫
+var MODEL = 'gemini-3.5-flash-lite';
+var BACKUP_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.6-flash', 'gemini-3.8-flash'];
+// =========================
+
+var SHEET_KB = '知識庫';
+var SHEET_LOG = '提問記錄';
+var KB_HEAD = ['編號', '主題', '內容', '來源名稱', '來源網址'];
+
+// ---- 第一次請在編輯器執行這個：建立「知識庫」「提問記錄」工作表、放進示範資料、測試金鑰 ----
+function setupKB() {
+  var sh = kbSheet();
+  if (sh.getLastRow() < 2) {
+    SAMPLE_KB.forEach(function (r, i) { sh.appendRow([i + 1].concat(r)); });
+    Logger.log('已放進 ' + SAMPLE_KB.length + ' 則示範資料。上線前請換成你們單位正式的衛教內容');
+  }
+  logSheet();
+  Logger.log('知識庫目前有 ' + readKB().length + ' 則可以用的資料');
+  Logger.log('Gemini 測試：' + askGemini('請用一句話說「' + BOT_NAME + '準備好了」'));
+}
+
+// ---- 在編輯器執行這個：不用開 LINE，就能看小幫手怎麼回答 ----
+function testAsk() {
+  ['低血糖的時候要怎麼辦？', '颱風天要準備什麼？', '我爸爸叫不醒'].forEach(function (q) {
+    Logger.log('問：' + q + '\n答：' + answer(q, 'test'));
+  });
+}
+
+function book() { return SpreadsheetApp.getActiveSpreadsheet(); }
+
+function kbSheet() {
+  var sh = book().getSheetByName(SHEET_KB);
+  if (!sh) {
+    sh = book().insertSheet(SHEET_KB, 0);
+    sh.getRange(1, 1, 1, KB_HEAD.length).setValues([KB_HEAD]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+    sh.setColumnWidth(3, 520);
+    sh.setColumnWidth(4, 220);
+  }
+  return sh;
+}
+
+function logSheet() {
+  var sh = book().getSheetByName(SHEET_LOG);
+  if (!sh) {
+    sh = book().insertSheet(SHEET_LOG);
+    sh.getRange(1, 1, 1, 4).setValues([['時間', '問題', '回答', '用到的資料編號']]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+// 讀出知識庫。沒有寫「來源名稱」的那一列不會被使用：沒有出處的內容不拿來回答民眾
+function readKB() {
+  var sh = kbSheet(), last = sh.getLastRow();
+  if (last < 2) return [];
+  return sh.getRange(2, 1, last - 1, KB_HEAD.length).getValues().map(function (r) {
+    return { id: String(r[0]).trim(), topic: String(r[1]).trim(), text: String(r[2]).trim(), source: String(r[3]).trim(), url: String(r[4]).trim() };
+  }).filter(function (r) { return r.id && r.text && r.source; });
+}
+
+// ---- LINE 傳訊息進來時會執行這裡 ----
+function doPost(e) {
+  var body = {};
+  try { body = JSON.parse(e.postData.contents) || {}; } catch (err) {}
+  (body.events || []).forEach(function (ev) {
+    if (ev.type !== 'message') return;
+    if (isDuplicate(ev.webhookEventId)) return;
+    var userId = ev.source ? ev.source.userId : '';
+    var reply;
+    if (ev.message.type !== 'text') {
+      reply = '我目前只看得懂文字，請把問題用打字的方式告訴我。';
+    } else {
+      if (ev.source && ev.source.type === 'user') callLINE('chat/loading/start', { chatId: userId, loadingSeconds: 30 });
+      try {
+        reply = answer(ev.message.text, userId);
+      } catch (err) {
+        reply = '系統暫時有狀況，請稍後再問一次。\n（' + err.message + '）';   // 出錯時也回一句，不要沒反應
+      }
+    }
+    callLINE('message/reply', { replyToken: ev.replyToken, messages: [{ type: 'text', text: toTraditional(reply).slice(0, 4900) }] });
+  });
+  return HtmlService.createHtmlOutput('OK');
+}
+
+// ---- 回答一個問題：這是整個小幫手的流程 ----
+function answer(question, userId) {
+  question = String(question).trim();
+  // 1. 緊急狀況：不問 AI，直接請對方就醫
+  for (var i = 0; i < EMERGENCY_WORDS.length; i++) {
+    if (question.indexOf(EMERGENCY_WORDS[i]) >= 0) return finish(question, EMERGENCY_REPLY, '緊急提醒');
+  }
+  // 2. 打招呼：自我介紹
+  if (/^(你好|您好|哈囉|嗨|hi|hello|安安|早安|午安|晚安|在嗎|請問|你是誰|怎麼用|說明)[\s!！?？。～~]*$/i.test(question)) return intro();
+  // 3. 問太多次：請對方晚點再問
+  if (tooMany(userId)) return '您這個小時問的問題比較多，請過一會兒再問。急事請直接聯絡您的醫療團隊。';
+  // 4. 從知識庫挑出最相關的幾則
+  var kb = readKB();
+  if (!kb.length) return '知識庫還沒有資料，請管理員先在試算表的「知識庫」工作表填入衛教內容。';
+  var picks = pickRows(question, kb, 8);
+  // 5. 請 AI 只根據這幾則回答，並標出用了哪一則
+  var system = '你是「' + ORG_NAME + '」的' + TOPIC + '衛教小幫手「' + BOT_NAME + '」，對象是一般民眾。\n' +
+    '規則：\n' +
+    '1. 只能根據下面提供的「衛教資料」回答，不可以加入資料裡沒有的事實、數字或建議。\n' +
+    '2. 每一個重點後面都要用 [編號] 標出它出自哪一則資料，例如 [3]。\n' +
+    '3. 資料裡找不到答案時，只輸出四個字：查無資料。不要猜，也不要用自己的知識補。\n' +
+    '4. 不可以診斷疾病，不可以建議開始、停止或調整任何藥物與劑量；遇到這類問題，請對方詢問自己的醫療團隊。\n' +
+    '5. 不要用 Markdown 符號（例如 ** 或 #）。\n' +
+    '說話方式：' + TONE;
+  var context = picks.map(function (r) { return '[' + r.id + ']（' + r.topic + '）' + r.text; }).join('\n\n');
+  var text = askGemini('衛教資料：\n\n' + context + '\n\n民眾的問題：' + question, system).replace(/\*\*/g, '');
+  // 6. 來源由程式從知識庫帶出來，不是 AI 寫的，所以不會出現編造的出處
+  var used = [], seen = {};
+  (text.match(/\[\s*#?\s*[\w-]+\s*\]/g) || []).forEach(function (m) {
+    var id = m.replace(/[\[\]#\s]/g, '');
+    var row = picks.filter(function (r) { return r.id === id; })[0];
+    if (row && !seen[id]) { seen[id] = true; used.push(row); }
+  });
+  if (/查無資料/.test(text) || !used.length) return finish(question, NOT_FOUND, '');   // 沒有出處的回答不送出
+  var sources = used.map(function (r) { return '[' + r.id + '] ' + r.source + (r.url ? '\n' + r.url : ''); }).join('\n');
+  return finish(question, text.trim() + '\n\n資料來源：\n' + sources + '\n\n' + DISCLAIMER, used.map(function (r) { return r.id; }).join('、'));
+}
+
+function intro() {
+  var topics = {}, list = [];
+  readKB().forEach(function (r) { if (r.topic && !topics[r.topic]) { topics[r.topic] = true; list.push(r.topic); } });
+  return '您好，我是' + ORG_NAME + '的' + TOPIC + '衛教小幫手「' + BOT_NAME + '」。\n直接打字問我' + TOPIC + '的問題，我會根據衛教資料回答，並附上資料來源。' +
+    (list.length ? '\n\n可以問我：' + list.slice(0, 8).join('、') : '') + '\n\n提醒：請不要傳姓名、身分證字號、病歷號等個人資料。緊急狀況請直接撥 119。';
+}
+
+function finish(question, reply, usedIds) {
+  if (LOG_QUESTIONS) {
+    try { logSheet().appendRow([new Date(), question.slice(0, 500), reply.slice(0, 2000), usedIds]); } catch (err) {}
+  }
+  return reply;
+}
+
+// 挑出和問題最相關的幾則：比對「連續兩個字」重複的數量，不用呼叫 AI，所以不花額度
+function pickRows(question, kb, count) {
+  if (kb.length <= count) return kb;
+  function grams(s) {
+    s = String(s).replace(/[\s，。、？！?!：:；;（）()「」\[\]]/g, '');
+    var out = {};
+    for (var i = 0; i < s.length - 1; i++) out[s.substr(i, 2)] = true;
+    return out;
+  }
+  var q = grams(question);
+  return kb.map(function (r, i) {
+    var g = grams(r.topic + r.topic + r.text), score = 0;
+    Object.keys(q).forEach(function (k) { if (g[k]) score += (r.topic.indexOf(k) >= 0 ? 3 : 1); });
+    return { r: r, score: score, i: i };
+  }).sort(function (a, b) { return b.score - a.score || a.i - b.i; }).slice(0, count).map(function (x) { return x.r; });
+}
+
+function tooMany(userId) {
+  if (!userId || userId === 'test') return false;
+  var cache = CacheService.getScriptCache(), key = 'rate-' + userId;
+  var n = Number(cache.get(key) || 0);
+  if (n >= MAX_PER_HOUR) return true;
+  cache.put(key, String(n + 1), 3600);
+  return false;
+}
+
+// ---- 繁體中文：每次呼叫 Gemini 都帶這條規則；回答裡如果還有簡體字，再請它轉一次 ----
+var TW_RULE = '一律使用繁體中文（台灣用語）。就算輸入是簡體中文，輸出也要轉成繁體中文，不可以出現簡體字。';
+// 只有簡體中文才會用到的常用字（用編碼寫，這份程式碼本身才不會出現簡體字）。這一行很長，不用看也不用改
+var SIMPLIFIED = /[\u4e13\u4e1a-\u4e1d\u4e22\u4e24\u4e25\u4e27\u4e2a\u4e34\u4e3a\u4e3d\u4e3e\u4e49\u4e4c\u4e50\u4e54\u4e60\u4e61\u4e66\u4e70\u4e71\u4e89\u4e8f\u4e9a\u4ea7\u4ea9\u4eb2\u4ebf\u4ec5\u4ece\u4ed1\u4ed3\u4eea\u4eec\u4f17\u4f1a\u4f1e-\u4f20\u4f24\u4f26\u4f2a\u4fa0\u4fa3\u4fa5-\u4fa9\u4fe9\u4fed\u503a\u503e\u507f\u50a8\u5151\u5170\u5173\u5174\u5179\u517b\u517d\u5185\u5188\u518c\u5199\u519b\u519c\u51af\u51b2\u51b3\u51b5\u51bb\u51c0\u51c9\u51cf\u51d1\u51db\u51e4\u51ed\u51ef\u51fb\u51ff\u5218-\u521b\u5220\u522b\u5239\u523d\u5242\u5250\u5251\u5265\u5267\u529d\u529e\u52a1\u52a8\u52b1-\u52b3\u52bf\u52cb\u5300\u533a\u533b\u534e\u534f\u5355\u5356\u5362\u5364\u5367\u536b\u5374\u5385\u5386\u5389\u538b\u538c\u5395\u53a2\u53a6\u53a8\u53a9\u53bf\u53c1\u53c2\u53cc\u53d1\u53d8\u53d9\u53e0\u53f6\u53f7\u53f9\u5413\u5415\u5417\u542f\u5434\u5450\u5455\u5458\u545b\u545c\u548f\u5499\u54cd\u54d1\u54d7\u54df\u5524\u556e\u5578\u55b7\u5618\u5631\u56a3\u56e2\u56ed\u56f1\u56f4\u56fd\u56fe\u5706\u573a\u5757\u575a\u575b\u575d-\u5760\u5784\u5792\u57a6\u57ab\u5811\u5815\u5899\u58ee\u58f0\u58f3\u58f6\u5904\u5907\u591f\u5934\u5939\u593a\u594b\u5956\u5965\u5986-\u5988\u5a04\u5a07\u5a31\u5a74\u5a76\u5b59\u5b66\u5b6a\u5b9d\u5b9e\u5ba0\u5ba1\u5baa\u5bab\u5bbd\u5bbe\u5bdd\u5bf9\u5bfb\u5bfc\u5bff\u5c06\u5c14\u5c18\u5c1d\u5c27\u5c3d\u5c42\u5c49\u5c4a\u5c5e\u5c61\u5c7f\u5c81\u5c82\u5c97\u5c9b\u5cbf\u5ce1\u5ce6\u5d2d\u5de9\u5e01\u5e05\u5e08\u5e10\u5e1c\u5e26\u5e27\u5e2e\u5e42\u5e7f\u5e86\u5e90\u5e93\u5e94\u5e99\u5e9e\u5e9f\u5f00\u5f03\u5f20\u5f25\u5f2f\u5f39\u5f3a\u5f52\u5f53\u5f55\u5f66\u5f7b\u5f84\u5fc6\u5fe7\u6001\u6002\u603b\u604b\u6052\u6073\u6076\u607c\u60a6\u60ac\u60af\u60e7-\u60e9\u60eb\u60ed-\u60ef\u6124\u6151\u61d2\u620f\u6218\u6237\u6267\u6269\u626b\u626c\u629a\u629b\u62a0-\u62a2\u62a4\u62a5\u62c5\u62df\u62e2\u62e3\u62e5-\u62e9\u631a\u631b\u631d-\u6321\u6323-\u6325\u635e\u635f\u6361-\u6363\u63b3\u63b7\u63b8\u63ba\u63fd\u6400-\u6402\u6405\u643a\u6444\u6446-\u6448\u644a\u6491\u64b5\u64de\u6512\u654c\u655b\u6570\u658b\u65a9\u65ad\u65e0\u65e7\u65f6\u65f7\u663c\u663e\u664b\u6653\u6655\u6682\u672f\u6740\u6742\u6743\u6761\u6765\u6768\u67a2\u67a3\u67aa\u67ab\u67e0\u6805\u6807\u6808\u680b\u680f\u6811\u6837\u6863\u6865\u6868\u6869\u68a6\u68c0\u692d\u697c\u69db\u6a2a\u6a31\u6a71\u6b22\u6b27\u6b7c\u6b8b\u6bb4\u6bc1\u6bd5\u6bd9\u6be1\u6c22\u6c47\u6c49\u6c64\u6c79\u6c9f\u6ca1\u6ca4-\u6ca7\u6caa\u6cea\u6cfb-\u6cfd\u6d45-\u6d47\u6d4a\u6d4b\u6d4e\u6d51\u6d53\u6d9b\u6d9d\u6d9f\u6da1\u6da3\u6da4\u6da6-\u6da9\u6e0a\u6e0d\u6e10\u6e14\u6e17\u6e29\u6e7e\u6e7f\u6e83\u6e85\u6eda\u6ede\u6ee1\u6ee4-\u6ee6\u6ee8\u6ee9\u6f4d\u6f5c\u6f9c\u6fd2\u706d\u706f\u7075\u707e\u707f\u7089\u70b9\u70bc\u70bd\u70c1-\u70c3\u70db\u70df\u70e6\u70e7\u70e9\u70eb-\u70ed\u7115\u7231\u7237\u7275\u727a\u728a\u72b6\u72b9\u72c8\u72de\u72ec-\u72ee\u72f0\u72f1\u730e\u732a\u732b\u732e\u736d\u739b\u73af\u73b0\u73d0\u7410\u743c\u7476\u7535\u753b\u7545\u7574\u7597\u759f\u75a1\u75ae\u75af\u75c8\u75c9\u75ea\u762a\u762b\u7663\u7691\u76b1\u76cf-\u76d1\u76d6-\u76d8\u7741\u7792\u77a9\u77eb\u77fe\u77ff\u7801\u7816\u781a\u783e\u7840\u7855\u7877\u788d\u78b1\u793c\u7977\u7978\u7984\u79c3\u79c6\u79ef\u79f0\u79fd\u7a0e\u7a33\u7a77\u7a83\u7a8d\u7a91\u7a9c\u7a9d\u7aa5\u7ad6\u7ade\u7b0b\u7b14\u7b3a\u7b3c\u7b5b\u7b79\u7b7e\u7b80\u7ba9\u7bd3\u7bee\u7c7b\u7ca4\u7caa\u7cae\u7d27\u7ea0\u7ea2\u7ea4\u7ea6\u7ea7\u7eaa-\u7eac\u7eaf\u7eb1-\u7eb3\u7eb5-\u7eba\u7ebd\u7ebf\u7ec3-\u7ec8\u7eca\u7ecd-\u7ecf\u7ed1-\u7ed3\u7ed5\u7ed8-\u7eda\u7edc-\u7edf\u7ee2\u7ee3\u7ee5-\u7ee7\u7ee9\u7eea\u7eed\u7ef0\u7ef3-\u7ef5\u7ef7\u7ef8\u7efc\u7efd\u7eff\u7f00\u7f04-\u7f06\u7f09\u7f0e\u7f13-\u7f16\u7f18\u7f1a\u7f1d\u7f20\u7f28\u7f29\u7f2e\u7f34\u7f57\u7f5a\u7f62\u7fd8\u8038\u803b\u8042\u804b\u804c\u8054\u806a\u8083\u80a0\u80a4\u80be-\u80c1\u80c6\u80f6\u8109\u810f-\u8111\u8113\u811a\u8131\u8138\u817b\u817e\u8206\u8230\u8231\u8270\u8273\u827a\u8282\u829c\u82a6\u82c7\u82cd\u82cf\u830e\u8346\u835a\u8361\u8363\u8364\u8367\u836b\u836f\u83b1\u83b2\u83b7\u83b9\u841d\u8424\u8425\u8427\u8428\u8471\u848b\u84dd\u84df\u8537\u853c\u8574\u864f\u8651\u865a\u867d\u867e\u8680-\u8682\u86ca\u86ee\u86f0\u8715\u8717\u8747\u8749\u8845\u8854\u8865\u886c\u8884\u889c\u88ad\u88c5\u88e4\u89c1\u89c2\u89c4-\u89c6\u89c8\u89c9\u8a89\u8a8a\u8ba1-\u8ba5\u8ba8\u8ba9\u8bab\u8bad-\u8bb0\u8bb2\u8bb3\u8bb6\u8bb8-\u8bba\u8bbc-\u8bc1\u8bc4-\u8bc6\u8bc8-\u8bca\u8bcc\u8bcd\u8bd1\u8bd5\u8bd7\u8bda\u8bdb\u8bdd\u8bde\u8be1-\u8be3\u8be5-\u8be7\u8beb-\u8bed\u8bef\u8bf1\u8bf2\u8bf4\u8bf5\u8bf7\u8bf8\u8bfa\u8bfb\u8bfd\u8bfe\u8c01\u8c03\u8c05\u8c06\u8c08\u8c0a\u8c0b\u8c0d\u8c0e\u8c10\u8c13\u8c17\u8c1a\u8c1c\u8c22-\u8c24\u8c26\u8c28\u8c29\u8c2c\u8c2d\u8c30\u8c31\u8c34\u8d1d-\u8d1f\u8d21-\u8d31\u8d34\u8d35\u8d37-\u8d3a\u8d3c\u8d3e\u8d3f\u8d41-\u8d44\u8d4a-\u8d4c\u8d4e-\u8d50\u8d54\u8d56\u8d58\u8d5a\u8d5b\u8d5e\u8d60-\u8d63\u8d75\u8d8b\u8dc3\u8df5\u8e0c\u8e2a\u8e7f\u8eaf\u8f66-\u8f69\u8f6c\u8f6e-\u8f70\u8f74\u8f7b\u8f7d\u8f7f\u8f83\u8f85\u8f86\u8f88-\u8f8a\u8f90\u8f91\u8f93\u8f95-\u8f97\u8f99\u8f9e\u8fa9\u8fab\u8fb9\u8fbd\u8fbe\u8fc1\u8fc7\u8fc8\u8fd0\u8fd8\u8fd9\u8fdb-\u8fdf\u8ff9\u9009\u900a\u9012\u903b\u9057\u9065\u9093\u90ae\u90b9\u90bb\u90d1\u90e7\u90f8\u915d\u9171\u917f\u91ca\u9274\u9488\u9489\u948e\u9492\u9493\u9499\u949d-\u94a2\u94a5-\u94a9\u94ae\u94b1\u94b3\u94b5\u94bb\u94be\u94c0-\u94c3\u94c5\u94c6\u94dc\u94dd\u94e1\u94e3\u94ec\u94ed\u94f0-\u94f2\u94f6\u94f8\u94fa\u94fe\u9500\u9501\u9504\u9505\u9508\u950b\u950c\u9510\u9511\u9517\u9519\u951a\u9521\u9523-\u9526\u9528\u952d-\u9530\u9539\u953b\u9540\u9541\u9547\u954a\u954d\u9550\u9551\u955c\u9563\u956d\u9570\u9576\u957f\u95e8\u95ea\u95ed-\u95f0\u95f2\u95f4\u95f7-\u95fb\u95fd\u9600-\u9602\u9605\u9609\u960e\u9610\u9611\u9614\u961f\u9633-\u9636\u9645-\u9648\u9655\u9668\u9669\u968f\u9690\u96b6\u96be\u96cf\u96fe\u9759\u97e6\u97e7\u97e9\u97f5\u9875-\u9877\u9879-\u987b\u987d-\u987f\u9881\u9882\u9884-\u9888\u988a\u9890\u9891\u9893\u9896-\u9898\u989c\u989d\u98a0\u98a4\u98a7\u98ce\u98d8\u98de\u9965\u996d-\u9972\u9975\u9976\u997a\u997c\u997f\u9981\u9985\u9986\u9988\u998b\u998f\u9992\u9a6c-\u9a71\u9a73\u9a74\u9a76\u9a79\u9a7b\u9a7c\u9a7e\u9a82\u9a84\u9a86\u9a87\u9a8b\u9a8c\u9a8f\u9a91\u9a97\u9a9a\u9aa1\u9aa4\u9c7c\u9c81\u9c8d\u9c9c\u9ca4\u9cb8\u9cc3\u9cd6\u9cde\u9e1f\u9e21\u9e23\u9e25\u9e26\u9e2d\u9e2f\u9e33\u9e35\u9e3d\u9e3f\u9e43\u9e45\u9e4a\u9e4f\u9e64\u9e70\u9ea6\u9ec4\u9f50\u9f7f\u9f84\u9f8b\u9f99\u9f9a\u9f9f]/;
+
+function toTraditional(text) {
+  text = String(text);
+  if (!SIMPLIFIED.test(text)) return text;
+  try {
+    return askGemini('把下面文字裡的簡體字全部換成繁體字（台灣用語）。其他內容、標點、換行、網址和格式一個字都不要改，只輸出轉換後的文字：\n\n' + text, '', true) || text;
+  } catch (err) {
+    return text;
+  }
+}
+
+// ---- 呼叫 Gemini：忙線或模型停用時依序換備用模型 ----
+function askGemini(text, system, keep) {
+  var models = [MODEL].concat(BACKUP_MODELS.filter(function (m) { return m !== MODEL; }));
+  var start = Date.now(), data = {};
+  for (var i = 0; i < models.length; i++) {
+    data = callGemini(models[i], text, system, true);
+    if (data.error && data.error.code === 400 && /think/i.test(data.error.message)) data = callGemini(models[i], text, system, false);
+    if (!data.error) break;
+    if ([404, 429, 500, 502, 503].indexOf(data.error.code) < 0) break;   // 金鑰錯誤等問題，換模型也沒用
+    if (Date.now() - start > 20000) break;
+  }
+  var out = '';
+  try { out = data.candidates[0].content.parts.map(function (p) { return p.text || ''; }).join('').trim(); } catch (err) {}
+  if (out) return keep ? out : toTraditional(out);
+  var e = data.error;
+  if (!e) throw new Error('AI 這次沒有給出答案');
+  var tips = {
+    400: '金鑰好像不對。',
+    402: '這把金鑰的專案開了付費（預付制），但儲值金用完了。請到 AI Studio 建立一個沒有綁帳單的新專案、換一把新金鑰。',
+    403: '這把金鑰沒有權限，請到 AI Studio 重新建立。',
+    404: '模型名稱已停用，請把最上面的 MODEL 換成新的名稱。',
+    429: '免費額度用完了，或問得太快。',
+    503: 'Google 的 AI 現在太多人使用。'
+  };
+  throw new Error((tips[e.code] || '') + e.code + ' ' + e.message);
+}
+
+function callGemini(model, text, system, fast) {
+  var body = {
+    system_instruction: { parts: [{ text: (system ? system + '\n' : '') + TW_RULE }] },
+    contents: [{ role: 'user', parts: [{ text: text }] }]
+  };
+  if (fast && model.indexOf('lite') < 0) body.generationConfig = { thinkingConfig: { thinkingLevel: 'low' } };   // 非 lite 模型調低思考，回得比較快
+  var res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
+    method: 'post', contentType: 'application/json',
+    headers: { 'x-goog-api-key': GEMINI_API_KEY },
+    payload: JSON.stringify(body), muteHttpExceptions: true
+  });
+  try {
+    return JSON.parse(res.getContentText());
+  } catch (err) {
+    return { error: { code: res.getResponseCode(), message: 'Gemini 沒有回傳正確的資料' } };
+  }
+}
+
+// ---- 送訊息、擋重複 ----
+function callLINE(path, data) {
+  UrlFetchApp.fetch('https://api.line.me/v2/bot/' + path, {
+    method: 'post', contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + LINE_TOKEN },
+    payload: JSON.stringify(data), muteHttpExceptions: true
+  });
+}
+
+function isDuplicate(id) {
+  if (!id) return false;
+  var cache = CacheService.getScriptCache();
+  if (cache.get(id)) return true;
+  cache.put(id, '1', 600);
+  return false;
+}
+
+// ---- 示範資料：教學用的衛教摘要，不是正式指引。上線前請換成你們單位審核過的內容，並填上真正的來源 ----
+var DEMO = '示範資料（請換成貴單位的衛教單張名稱）';
+var SAMPLE_KB = [
+  ['低血糖的症狀', '血糖低於 70 mg/dL 就是低血糖。常見症狀有冒冷汗、心悸、發抖、很餓、頭暈、視力模糊、注意力不集中。長期糖尿病或常常低血糖的人，症狀可能不明顯，要更常量血糖。', DEMO, ''],
+  ['低血糖的處理', '意識清楚時用「15–15 法則」：馬上吃 15 公克的糖，例如葡萄糖錠 3 到 4 顆、含糖果汁或汽水半杯（約 120 到 150 毫升）、方糖 3 顆。等 15 分鐘再量血糖，還是低於 70 mg/dL 就再吃一次。血糖回到 70 以上後，如果離下一餐超過 1 小時，再吃一份點心，例如 1 杯牛奶加蘇打餅。不要用巧克力或冰淇淋救急，脂肪會讓糖吸收變慢。意識不清或沒辦法吞嚥時，不可以餵任何食物或飲料，請立刻撥打 119。', DEMO, ''],
+  ['血糖控制目標', '一般成人第 2 型糖尿病常用的目標：糖化血色素（HbA1c，反映近三個月的平均血糖）低於 7.0%；飯前血糖 80 到 130 mg/dL；飯後 1 到 2 小時血糖低於 180 mg/dL。年紀大、身體比較弱或常低血糖的人，目標可以放寬。每個人的目標不一樣，請以醫師幫您訂的為準。', DEMO, ''],
+  ['飲食：餐盤法', '每一餐的餐盤，一半放蔬菜（葉菜、瓜類、菇類），四分之一放全穀雜糧（糙米、地瓜），四分之一放豆魚蛋肉。飲料以白開水或無糖茶為主，少喝含糖飲料和果汁。水果一天 2 份（1 份約一個拳頭大），分開在不同餐吃，不建議打成果汁。外食選清蒸、水煮、烤的，少選勾芡、油炸和甜醬。', DEMO, ''],
+  ['運動建議', '每週至少 150 分鐘中等強度的有氧運動，例如快走、騎腳踏車、游泳，分散在至少 3 天，不要連續超過 2 天沒運動。每週 2 到 3 次肌力訓練，例如彈力帶、深蹲。每坐 30 分鐘起來動一動。運動前血糖低於 90 mg/dL，先吃一點含糖的東西再運動；有打胰島素或吃容易低血糖的藥，運動時隨身帶糖。', DEMO, ''],
+  ['足部照護', '每天檢查雙腳，包含腳底和趾縫，看有沒有傷口、水泡、紅腫。每天用溫水洗腳，先用手肘試水溫，洗完把趾縫擦乾。指甲平平地剪，不要剪太短。不要赤腳走路，穿鞋前先看鞋子裡有沒有異物。不要自己處理雞眼或厚繭，不要用熱水袋、電毯直接暖腳。傷口超過 2 天沒好、有分泌物或異味、腳紅腫熱痛，請盡快就醫。', DEMO, ''],
+  ['生病時的照顧', '感冒、發燒、腸胃炎時血糖常會升高。不要自己停藥或停打胰島素，藥物怎麼調整請聯絡您的醫療團隊。每 2 到 4 小時量一次血糖，每小時補充約 1 杯無糖的水分；吃不下時改喝稀飯、米湯。出現下面情況請立刻就醫：血糖連續兩次超過 300 mg/dL、嘔吐或腹瀉超過 6 小時沒辦法喝水、呼吸又深又快或呼氣有水果味、意識改變或非常虛弱。', DEMO, ''],
+  ['量血糖的時間', '常見的測量時間是早上空腹、三餐飯前、飯後 2 小時（從吃第一口開始算）和睡前。覺得不舒服、懷疑低血糖、運動前後、生病時要加量。把數值連同吃了什麼、做了什麼運動一起記下來，回診時帶給醫療團隊看。多久量一次，請依照您的醫師或衛教師的建議。', DEMO, '']
+];
+</script>
+<script type="text/plain" id="tpl-kb">我要把衛教資料整理成聊天機器人的「知識庫」，放進 Google 試算表。機器人只會根據這份知識庫回答民眾，而且每則回答都要附上資料來源。
+
+開始整理之前，請先問我 2 到 3 個問題，等我回答之後再動手。例如：
+- 這份資料的正式名稱、發行單位、年份和網址是什麼（要當成「來源」）
+- 讀的人是誰（病人、家屬、長輩）
+- 有沒有哪些內容不想讓機器人回答（例如藥物劑量）
+
+整理的規則：
+1. 一列一個主題，民眾可能會分開問的事情就拆成不同列。
+2. 「內容」每列 80 到 200 個字，用民眾聽得懂的話寫，數字和單位照原文，不可以改。
+3. 只能用我貼的資料，不可以加入資料裡沒有的內容。資料裡沒寫清楚的地方，列出來問我，不要自己補。
+4. 一律用繁體中文（台灣用語）。
+5. 輸出成表格，四欄：主題｜內容｜來源名稱｜來源網址。我會直接複製貼到試算表。
+
+下面是我的衛教資料：
+【把衛教單張或指引的文字貼在這裡】</script>
+<script type="text/plain" id="tpl-code">這是我的 Google Apps Script 聊天機器人程式：民眾在 LINE 問衛教問題，程式從 Google 試算表的「知識庫」挑出相關資料，請 Gemini 只根據這些資料回答，再由程式附上資料來源。
+
+我想調整的地方：【用一兩句話描述。例如：回答的最後加上我們衛教室的電話和服務時間；或是民眾問「掛號」時直接回掛號網址，不要問 AI】
+
+開始改之前，請先問我 2 到 3 個問題，把需求問清楚，等我回答之後再動手。
+
+限制：
+- 不可以拿掉這三個安全設計：只根據知識庫回答、沒有出處就不回答、緊急關鍵字直接請對方就醫。
+- 資料來源一定要由程式從知識庫帶出來，不可以讓 AI 自己寫來源。
+- 不要改最上面「只要改這一區」裡的金鑰。只用 Google Apps Script 內建的服務，註解用繁體中文（台灣用語）。
+最後請給我「完整的、可以整份貼上」的程式碼，不要省略任何一段，並列出你改了哪幾個地方。
+
+下面是目前的程式碼（金鑰和權杖我已經改成 XXXX）：
+【把整份程式碼貼在這裡】</script>
+<script>
+(function(){
+function $(s){ return document.querySelector(s); }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function q(s){ return "'" + String(s).replace(/\\/g,'\\\\').replace(/'/g, "\\'").replace(/\s+/g,' ').trim() + "'"; }
+var TPL = $('#tpl-edu').textContent.replace(/^\n/, '');
+function code(){
+  var v = { '__KEY__': $('#e-gem').value.trim() || '在這裡貼上 Gemini API 金鑰', '__LINE__': $('#e-line').value.trim() || '在這裡貼上 LINE Channel access token',
+    '__NAME__': $('#e-name').value.trim() || '小糖', '__ORG__': $('#e-org').value.trim() || '示範衛教室', '__TOPIC__': $('#e-topic').value.trim() || '糖尿病' };
+  return TPL.replace(/__(KEY|LINE|NAME|ORG|TOPIC)__/g, function(m){ return q(v[m]); });
+}
+function highlight(src){
+  return src.split('\n').map(function(line){
+    var ci = -1, inStr = false;
+    for(var i = 0; i < line.length - 1; i++){
+      var ch = line[i];
+      if(ch === '\\'){ i++; continue; }
+      if(ch === "'") inStr = !inStr;
+      else if(!inStr && ch === '/' && line[i+1] === '/' && line[i-1] !== ':'){ ci = i; break; }
+    }
+    var codePart = ci >= 0 ? line.slice(0, ci) : line, com = ci >= 0 ? line.slice(ci) : '';
+    return esc(codePart).replace(/'((?:[^'\\]|\\.)*)'/g, '<span class="s">\'$1\'</span>').replace(/\b(var|function|return|if|else|for|try|catch|throw|new)\b(?![^<]*<\/span>)/g, '<span class="k">$1</span>') + (com ? '<span class="c">'+esc(com)+'</span>' : '');
+  }).join('\n');
+}
+function refresh(){ $('#e-code').innerHTML = highlight(code()); }
+['#e-gem','#e-line','#e-name','#e-org','#e-topic'].forEach(function(s){ $(s).addEventListener('input', refresh); });
+function wireCopy(btn, pre, getText, label){
+  $(btn).addEventListener('click', function(){
+    var cp = this, done = function(){ cp.textContent = '已複製 ✓'; setTimeout(function(){ cp.textContent = label; }, 1800); };
+    var fallback = function(){ var r = document.createRange(); r.selectNodeContents($(pre)); var s = getSelection(); s.removeAllRanges(); s.addRange(r); cp.textContent = '已選取，請按 Ctrl/⌘＋C'; };
+    try { navigator.clipboard.writeText(getText()).then(done, fallback); } catch(e){ fallback(); }
+  });
+}
+$('#k-text').textContent = $('#tpl-kb').textContent;
+$('#c-text').textContent = $('#tpl-code').textContent;
+wireCopy('#e-copy', '#e-code', code, '複製程式碼');
+wireCopy('#k-copy', '#k-text', function(){ return $('#tpl-kb').textContent; }, '複製這段話');
+wireCopy('#c-copy', '#c-text', function(){ return $('#tpl-code').textContent; }, '複製這段話');
+refresh();
+})();
+</script>
+<script>
+window.addEventListener('load', function(){
+  var host = document.querySelector('[data-oth-report]'); if(!host || !host.shadowRoot) return;
+  var st = document.createElement('style');
+  st.textContent = '.fab{width:34px;height:34px;padding:0;gap:0;justify-content:center;font-size:0;opacity:.72;right:14px;box-shadow:0 2px 8px rgba(0,0,0,.14),0 0 0 1.5px #06A04A inset;transition:opacity .2s}.fab:hover,.fab:focus-visible{opacity:1;width:auto;padding:0 12px;gap:6px;font-size:12.5px}.fab svg{width:15px;height:15px}';
+  host.shadowRoot.appendChild(st);
+  var fab = host.shadowRoot.querySelector('.fab'); if(fab){ fab.title = '回報錯誤或建議'; fab.setAttribute('aria-label','回報錯誤或建議'); }
+});
+</script>
+<script src="https://mattsue1003.github.io/oth-report-button/report.js" data-site="衛教小幫手機器人" data-color="#06A04A" data-label="錯誤／建議" data-offset="16" defer></script>
