@@ -742,13 +742,13 @@ var S_GEMINI = {
     '用 Google 帳號登入 Google AI Studio。<br><a class="link-out" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">開啟 AI Studio 金鑰頁 ↗</a>',
     '第一次進入會請你同意服務條款，勾選後按 <span class="ui">繼續</span>。',
     '按右上角 <span class="ui">建立 API 金鑰</span>（Create API key），選一個專案或讓它自動建立。',
-    '畫面出現一串 <code class="inl">AIza</code> 開頭的金鑰，按複製，先貼到記事本保存。'
+    '畫面出現一長串金鑰（新申請的通常是 <code class="inl">AQ.</code> 開頭，舊的是 <code class="inl">AIza</code> 開頭，兩種都可以），按複製，先貼到記事本保存。'
   ],
   mock: function(){ return fig(win('aistudio.google.com/apikey',
     '<div class="m-row" style="justify-content:space-between"><span class="m-title">API 金鑰</span><span class="m-btn pri hot">'+pin(3)+' ＋ 建立 API 金鑰</span></div>'+
     '<div class="m-muted">Gemini API 免費方案適合學習與測試</div>'+
-    '<div class="m-dialog"><div class="m-title" style="font-size:13px">已產生 API 金鑰</div><div class="m-row"><span class="m-field">AIzaSyB•••••••••••••••••••Q7k</span><span class="m-btn hot">'+pin(4)+' 複製</span></div></div>')); },
-  check:['記事本裡有一串 AIza 開頭、約 39 個字元的金鑰'],
+    '<div class="m-dialog"><div class="m-title" style="font-size:13px">已產生 API 金鑰</div><div class="m-row"><span class="m-field">AQ.Ab8•••••••••••••••••••Q7k</span><span class="m-btn hot">'+pin(4)+' 複製</span></div></div>')); },
+  check:['記事本裡有一長串金鑰，開頭是 AQ. 或 AIza'],
   pit:['金鑰等同密碼，不要截圖分享到群組','複製時不要多帶到空白或換行']
 };
 function S_CODE(pf){ return {
@@ -764,7 +764,7 @@ function S_CODE(pf){ return {
   ],
   mock: function(){ return fig(win('script.google.com/…/edit',
     '<div class="m-row"><span class="m-title hot">'+pin(2)+' 我的 AI 機器人</span><span style="flex:1"></span><span class="m-btn">💾</span><span class="m-btn hot">'+pin(5)+' ▶ 執行</span><span class="m-select">testGemini ▾</span><span class="m-btn pri">部署 ▾</span></div>'+
-    '<div class="m-code"><span style="color:var(--code-com)">// ===== 只要改這一區 =====</span>\nvar GEMINI_API_KEY = \'AIza…\';\nvar '+(pf==='line'?'LINE_TOKEN':'TG_TOKEN')+' = \'…\';\n\nfunction doPost(e) { … }</div>'+
+    '<div class="m-code"><span style="color:var(--code-com)">// ===== 只要改這一區 =====</span>\nvar GEMINI_API_KEY = \'AQ.…\';\nvar '+(pf==='line'?'LINE_TOKEN':'TG_TOKEN')+' = \'…\';\n\nfunction doPost(e) { … }</div>'+
     '<div class="m-dialog hot" style="box-shadow:none"><div class="m-muted">'+pin(6)+' 執行記錄</div><div style="font-size:12px">資訊　您好！我是你的 AI 小幫手，很高興為你服務。</div></div>')); },
   check:['執行 testGemini 後，執行記錄印出一句 AI 寫的自我介紹'],
   pit:['看到「抱歉，AI 暫時無法回覆…」：金鑰貼錯或多了空白','函式選單要選 testGemini，選 doPost 執行會出現錯誤，這是正常的']
@@ -822,7 +822,7 @@ function S_CF_CODE(pf){ return {
   ],
   mock: function(){ return fig(win('dash.cloudflare.com/…/my-ai-bot/production',
     '<div class="m-row"><span class="m-title">my-ai-bot</span><span style="flex:1"></span><span class="m-btn hot">'+pin(1)+' &lt;/&gt; Edit code</span><span class="m-btn pri hot">'+pin(3)+' Deploy</span></div>'+
-    '<div class="m-code"><span style="color:var(--code-com)">// ===== 只要改這一區 =====</span>\nconst GEMINI_API_KEY = \'AIza…\';\nconst '+(pf==='line'?'LINE_TOKEN':'TG_TOKEN')+' = \'…\';\n\nexport default { async fetch(request, env, ctx) { … } };</div>'+
+    '<div class="m-code"><span style="color:var(--code-com)">// ===== 只要改這一區 =====</span>\nconst GEMINI_API_KEY = \'AQ.…\';\nconst '+(pf==='line'?'LINE_TOKEN':'TG_TOKEN')+' = \'…\';\n\nexport default { async fetch(request, env, ctx) { … } };</div>'+
     '<div class="m-dialog hot" style="box-shadow:none"><div class="m-muted">'+pin(5)+' my-ai-bot.xiaoming.workers.dev/?test=1</div><div style="font-size:12px">AI 回答：您好！我是你的 AI 小幫手。<br>花了 1.2 秒</div></div>')); },
   check:['打開 ?test=1 的網址，看到一句 AI 寫的自我介紹和花費的秒數'],
   pit:['改過程式碼後，一定要再按一次 Deploy 才會生效','看到「抱歉，AI 暫時無法回覆…」：金鑰貼錯或多了空白','金鑰直接寫在程式碼裡，不要把編輯器畫面截圖分享到群組']
@@ -1013,7 +1013,7 @@ function toolHTML(kind){
     var chips = Object.keys(PERSONAS).map(function(k){ return '<button type="button" data-persona="'+k+'">'+k+'</button>'; }).join('');
     return '<div class="tool"><h3>小工具：產生你的程式碼</h3><p>填好後按「複製程式碼」，貼到 '+rl('Apps Script','Worker 的編輯器')+'。金鑰只在你的瀏覽器裡組合，不會上傳或儲存。也可以不填，貼上後再手動把中文提示換成金鑰。</p>'+
       '<div class="fields">'+
-        '<label class="fld">Gemini API 金鑰（第 1 步）<input id="in-gem" autocomplete="off" spellcheck="false" placeholder="AIza…" value="'+esc(state.gemKey)+'"></label>'+
+        '<label class="fld">Gemini API 金鑰（第 1 步）<input id="in-gem" autocomplete="off" spellcheck="false" placeholder="AQ.… 或 AIza…" value="'+esc(state.gemKey)+'"></label>'+
         '<label class="fld">'+tokLabel+'（第 '+(state.pf==='line'?4:2)+' 步）<input id="in-tok" autocomplete="off" spellcheck="false" placeholder="貼上 '+pfName+' 權杖" value="'+esc(state.pfToken)+'"></label>'+
       '</div>'+
       '<label class="fld">機器人的角色（SYSTEM_PROMPT）<div class="presets">'+chips+'</div><textarea id="in-persona">'+esc(state.persona)+'</textarea></label>'+
